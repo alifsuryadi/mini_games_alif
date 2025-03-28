@@ -2,15 +2,12 @@
 
 A new Flutter project.
 
-## Getting Started
+## Note
 
-This project is a starting point for a Flutter application.
+- core: This folder contains shared configurations, utilities, or helpers that are used throughout the project (e.g., common widgets, constants, themes, etc.).
 
-A few resources to get you started if this is your first Flutter project:
+- data: This folder holds the data layer, such as data models, repositories, or any data source-related files (e.g., API calls or local storage).
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+- domain: The domain layer contains the business logic. It includes use cases, entities, and interfaces that interact with data from the repository.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+- presentation: This layer contains all the UI-related components, such as screens, widgets, and state management.
