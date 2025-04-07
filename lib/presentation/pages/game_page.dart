@@ -61,11 +61,10 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
   void initState() {
     super.initState();
 
-    // Initialize animation controllers with faster duration (100ms instead of 200ms)
+    // Initialize animation controllers with faster duration
     _topSliderController = AnimationController(
       vsync: this,
-      duration:
-          const Duration(milliseconds: 100), // Reduced from 200ms to 100ms
+      duration: const Duration(milliseconds: 100),
     );
     _downSliderController = AnimationController(
       vsync: this,
@@ -83,6 +82,11 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
         CurvedAnimation(parent: _downSliderController, curve: Curves.easeOut));
     _upSliderAnimation = Tween<double>(begin: 1.0, end: 1.2).animate(
         CurvedAnimation(parent: _upSliderController, curve: Curves.easeOut));
+
+    // Set initial position to match the main number line values
+    // This puts the view at the middle of our detailed number line
+    _topSliderPosition =
+        (_minValue - _minOverallValue) / (_maxOverallValue - _minOverallValue);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeGame();
@@ -117,11 +121,12 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
   double _calculateZoomViewPosition(double zoomPosition) {
     // Convert the zoom position to a value in the overall range
     double totalRange = _maxOverallValue - _minOverallValue;
-    double zoomWidth = (_maxValue - _minValue) / totalRange;
 
-    // Calculate the position of the zoom window within the overall range
-    return (_minValue - _minOverallValue) / totalRange +
-        (zoomPosition * zoomWidth);
+    // Calculate the zoom window center value (in the number range)
+    double zoomedValue = _minValue + ((_maxValue - _minValue) * zoomPosition);
+
+    // Calculate the position of this value in the overall range
+    return (zoomedValue - _minOverallValue) / totalRange;
   }
 
   void _checkAnswer() {
@@ -338,7 +343,7 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
 
                               SizedBox(height: 12.h),
 
-// Updated Slider 1 container with exactly 5 tick marks, each with a number label
+                              // Slider 1
                               Container(
                                 padding: EdgeInsets.symmetric(
                                     vertical: 1.h, horizontal: 6.w),
@@ -348,7 +353,7 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
                                   borderRadius: BorderRadius.circular(8.r),
                                 ),
                                 child: SizedBox(
-                                  height: 40.h,
+                                  height: 35.h,
                                   child: Stack(
                                     children: [
                                       // Base line
@@ -364,9 +369,7 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
 
                                       // 5 evenly distributed tick marks with labels above them
                                       ...List.generate(5, (index) {
-                                        // Calculate positions evenly across the width: 0, 0.25, 0.5, 0.75, 1.0
                                         final position = index / 4;
-                                        // Calculate values for the 5 evenly spaced points
                                         final value = _minOverallValue +
                                             (_maxOverallValue -
                                                     _minOverallValue) *
@@ -390,8 +393,8 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
                                             Positioned(
                                               left: position *
                                                       (contentWidth - 20.w) -
-                                                  15.w, // Center the label over the tick
-                                              top: 2.h,
+                                                  15.w,
+                                              top: 5.h,
                                               child: Text(
                                                 value.toInt().toString(),
                                                 style: TextStyle(
@@ -405,41 +408,44 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
                                         );
                                       }),
 
-                                      // Make the entire slider area draggable
+                                      // Make the entire slider area draggable with dampened movement
                                       Positioned.fill(
                                         child: GestureDetector(
                                           onPanUpdate: (details) {
                                             setState(() {
-                                              // Calculate new position based on horizontal drag
-                                              final newPosition =
-                                                  (_topSliderPosition *
-                                                                  (contentWidth -
-                                                                      140.w -
-                                                                      36.w) +
-                                                              details.delta.dx)
-                                                          .clamp(
-                                                              0.0,
-                                                              contentWidth -
-                                                                  140.w -
-                                                                  36.w) /
-                                                      (contentWidth -
-                                                          140.w -
-                                                          36.w);
+                                              // Apply a dampening factor to make movement "heavier"
+                                              final dampFactor =
+                                                  0.3; // Lower = heavier feel
 
-                                              // Update slider position
-                                              _topSliderPosition = newPosition;
+                                              // Current position in pixels
+                                              final currentPosInPixels =
+                                                  _topSliderPosition *
+                                                      (contentWidth - 20.w);
+
+                                              // Apply dampened movement
+                                              final newPosInPixels =
+                                                  currentPosInPixels +
+                                                      (details.delta.dx *
+                                                          dampFactor);
+
+                                              // Convert back to 0-1 range and clamp
+                                              _topSliderPosition =
+                                                  (newPosInPixels /
+                                                          (contentWidth - 20.w))
+                                                      .clamp(0.0, 1.0);
                                             });
                                           },
                                         ),
                                       ),
 
-                                      // Zoom window indicator - shows the visible part in main view
-                                      // Enlarged orange border with translucent blue fill
+                                      // Zoom window indicator with heavier drag response
+
                                       Positioned(
-                                        left: zoomPosition *
+                                        left: _topSliderPosition *
                                                 (contentWidth - 20.w) -
                                             45.w,
-                                        top: 10.h,
+                                        top: 2
+                                            .h, // Changed to align with the top of the container
                                         child: GestureDetector(
                                           onTapDown: (_) {
                                             setState(() {
@@ -461,20 +467,25 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
                                           },
                                           onPanUpdate: (details) {
                                             setState(() {
+                                              // Apply dampening factor for heavier feel
+                                              final dampFactor = 0.3;
+
+                                              // Current position in pixels
+                                              final currentPosInPixels =
+                                                  _topSliderPosition *
+                                                      (contentWidth - 20.w);
+
+                                              // Apply dampened movement
+                                              final newPosInPixels =
+                                                  currentPosInPixels +
+                                                      (details.delta.dx *
+                                                          dampFactor);
+
+                                              // Convert back to 0-1 range and clamp
                                               _topSliderPosition =
-                                                  (_topSliderPosition *
-                                                                  (contentWidth -
-                                                                      140.w -
-                                                                      36.w) +
-                                                              details.delta.dx)
-                                                          .clamp(
-                                                              0.0,
-                                                              contentWidth -
-                                                                  140.w -
-                                                                  36.w) /
-                                                      (contentWidth -
-                                                          140.w -
-                                                          36.w);
+                                                  (newPosInPixels /
+                                                          (contentWidth - 20.w))
+                                                      .clamp(0.0, 1.0);
                                             });
                                           },
                                           onPanEnd: (_) {
@@ -491,14 +502,15 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
                                                     _topSliderAnimation.value,
                                                 child: Container(
                                                   width: 90.w,
-                                                  height: 20.h,
+                                                  height: 31
+                                                      .h, // Changed to match the container's height (SizedBox height)
                                                   decoration: BoxDecoration(
                                                     border: Border.all(
                                                       color: Colors.orange,
                                                       width: 3.w,
                                                     ),
-                                                    color: Colors.blue.withOpacity(
-                                                        0.3), // Translucent blue fill
+                                                    color: Colors.blue
+                                                        .withOpacity(0.3),
                                                     borderRadius:
                                                         BorderRadius.circular(
                                                             10.r),
