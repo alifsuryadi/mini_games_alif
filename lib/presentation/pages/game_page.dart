@@ -468,442 +468,500 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
                               ),
 
                               SizedBox(height: 12.h),
-
-                              // Slider 1
+                              // Wrapping the specified section in a container with the requested properties
                               Container(
-                                padding: EdgeInsets.symmetric(
-                                    vertical: 1.h, horizontal: 6.w),
+                                padding: EdgeInsets.only(
+                                    top: 5.h, bottom: 20.h, left: 0, right: 0),
                                 decoration: BoxDecoration(
-                                  color: const Color(
-                                      0xFF285498), // Darker blue background
-                                  borderRadius: BorderRadius.circular(8.r),
+                                  color: const Color(0xFF285498),
+                                  borderRadius: BorderRadius.circular(12.r),
                                 ),
-                                child: SizedBox(
-                                  height: 35.h,
-                                  child: Stack(
-                                    children: [
-                                      // Base line
-                                      Positioned(
-                                        left: 0,
-                                        right: 0,
-                                        top: 20.h,
-                                        child: Container(
-                                          height: 2.h,
-                                          color: Colors.white,
-                                        ),
+                                child: Column(
+                                  children: [
+                                    // Slider 1
+                                    Container(
+                                      margin: EdgeInsets.symmetric(
+                                          vertical: 5.h, horizontal: 8.w),
+                                      padding: EdgeInsets.symmetric(
+                                          vertical: 1.h, horizontal: 6.w),
+                                      decoration: BoxDecoration(
+                                        color: const Color(
+                                            0xFF093881), // Darker blue background
+                                        borderRadius:
+                                            BorderRadius.circular(8.r),
                                       ),
-
-                                      // 5 evenly distributed tick marks with labels above them
-                                      ...List.generate(5, (index) {
-                                        final position = index / 4;
-                                        final value = _minOverallValue +
-                                            (_maxOverallValue -
-                                                    _minOverallValue) *
-                                                position;
-
-                                        return Stack(
+                                      child: SizedBox(
+                                        height: 35.h,
+                                        child: Stack(
                                           children: [
-                                            // Tick mark
+                                            // Base line
                                             Positioned(
-                                              left: position *
-                                                  (contentWidth - 20.w),
-                                              top: 16.h,
+                                              left: 0,
+                                              right: 0,
+                                              top: 20.h,
                                               child: Container(
-                                                width: 2.w,
-                                                height: 8.h,
-                                                color: AppColors.numberYellow,
+                                                height: 2.h,
+                                                color: Colors.white,
                                               ),
                                             ),
 
-                                            // Number label directly above each tick mark
+                                            // 5 evenly distributed tick marks with labels above them
+                                            ...List.generate(5, (index) {
+                                              final position = index / 4;
+                                              final value = _minOverallValue +
+                                                  (_maxOverallValue -
+                                                          _minOverallValue) *
+                                                      position;
+
+                                              return Stack(
+                                                children: [
+                                                  // Tick mark
+                                                  Positioned(
+                                                    left: position *
+                                                        (contentWidth - 20.w),
+                                                    top: 16.h,
+                                                    child: Container(
+                                                      width: 2.w,
+                                                      height: 8.h,
+                                                      color: AppColors
+                                                          .numberYellow,
+                                                    ),
+                                                  ),
+
+                                                  // Number label directly above each tick mark
+                                                  Positioned(
+                                                    left: position *
+                                                            (contentWidth -
+                                                                20.w) -
+                                                        15.w,
+                                                    top: 5.h,
+                                                    child: Text(
+                                                      value.toInt().toString(),
+                                                      style: TextStyle(
+                                                        color: AppColors
+                                                            .numberYellow,
+                                                        fontSize: 10.sp,
+                                                        fontWeight:
+                                                            FontWeight.w500,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              );
+                                            }),
+
+                                            // Make the entire slider area draggable with dampened movement
+                                            Positioned.fill(
+                                              child: GestureDetector(
+                                                onPanUpdate: (details) {
+                                                  setState(() {
+                                                    // Apply a dampening factor to make movement "heavier"
+                                                    final dampFactor =
+                                                        0.3; // Lower = heavier feel
+
+                                                    // Current position in pixels
+                                                    final currentPosInPixels =
+                                                        _topSliderPosition *
+                                                            (contentWidth -
+                                                                20.w);
+
+                                                    // Apply dampened movement
+                                                    final newPosInPixels =
+                                                        currentPosInPixels +
+                                                            (details.delta.dx *
+                                                                dampFactor);
+
+                                                    // Convert back to 0-1 range and clamp
+                                                    _topSliderPosition =
+                                                        (newPosInPixels /
+                                                                (contentWidth -
+                                                                    20.w))
+                                                            .clamp(0.0, 1.0);
+
+                                                    // Update the detail view range based on new position
+                                                    _updateDetailViewRange();
+                                                  });
+                                                },
+                                              ),
+                                            ),
+
+                                            // Zoom window indicator with heavier drag response
                                             Positioned(
-                                              left: position *
+                                              left: _topSliderPosition *
                                                       (contentWidth - 20.w) -
-                                                  15.w,
-                                              top: 5.h,
-                                              child: Text(
-                                                value.toInt().toString(),
-                                                style: TextStyle(
-                                                  color: AppColors.numberYellow,
-                                                  fontSize: 10.sp,
-                                                  fontWeight: FontWeight.w500,
+                                                  45.w,
+                                              top: 2.h,
+                                              child: GestureDetector(
+                                                onTapDown: (_) {
+                                                  setState(() {
+                                                    _isTopSliderActive = true;
+                                                    _topSliderController
+                                                        .forward();
+                                                  });
+                                                },
+                                                onTapUp: (_) {
+                                                  setState(() {
+                                                    _isTopSliderActive = false;
+                                                    _topSliderController
+                                                        .reverse();
+                                                  });
+                                                },
+                                                onPanStart: (_) {
+                                                  setState(() {
+                                                    _isTopSliderActive = true;
+                                                    _topSliderController
+                                                        .forward();
+                                                  });
+                                                },
+                                                onPanUpdate: (details) {
+                                                  setState(() {
+                                                    // Apply dampening factor for heavier feel
+                                                    final dampFactor = 0.3;
+
+                                                    // Current position in pixels
+                                                    final currentPosInPixels =
+                                                        _topSliderPosition *
+                                                            (contentWidth -
+                                                                20.w);
+
+                                                    // Apply dampened movement
+                                                    final newPosInPixels =
+                                                        currentPosInPixels +
+                                                            (details.delta.dx *
+                                                                dampFactor);
+
+                                                    // Convert back to 0-1 range and clamp
+                                                    _topSliderPosition =
+                                                        (newPosInPixels /
+                                                                (contentWidth -
+                                                                    20.w))
+                                                            .clamp(0.0, 1.0);
+
+                                                    // Update the detail view range based on new position
+                                                    _updateDetailViewRange();
+                                                  });
+                                                },
+                                                onPanEnd: (_) {
+                                                  setState(() {
+                                                    _isTopSliderActive = false;
+                                                    _topSliderController
+                                                        .reverse();
+                                                  });
+                                                },
+                                                child: AnimatedBuilder(
+                                                  animation:
+                                                      _topSliderAnimation,
+                                                  builder: (context, child) {
+                                                    return Transform.scale(
+                                                      scale: _topSliderAnimation
+                                                          .value,
+                                                      child: Container(
+                                                        width: 90.w,
+                                                        height: 31.h,
+                                                        decoration:
+                                                            BoxDecoration(
+                                                          border: Border.all(
+                                                            color:
+                                                                Colors.orange,
+                                                            width: 3.w,
+                                                          ),
+                                                          color: Colors.blue
+                                                              .withOpacity(0.3),
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(
+                                                                      10.r),
+                                                        ),
+                                                      ),
+                                                    );
+                                                  },
                                                 ),
                                               ),
                                             ),
                                           ],
-                                        );
-                                      }),
-
-                                      // Make the entire slider area draggable with dampened movement
-                                      Positioned.fill(
-                                        child: GestureDetector(
-                                          onPanUpdate: (details) {
-                                            setState(() {
-                                              // Apply a dampening factor to make movement "heavier"
-                                              final dampFactor =
-                                                  0.3; // Lower = heavier feel
-
-                                              // Current position in pixels
-                                              final currentPosInPixels =
-                                                  _topSliderPosition *
-                                                      (contentWidth - 20.w);
-
-                                              // Apply dampened movement
-                                              final newPosInPixels =
-                                                  currentPosInPixels +
-                                                      (details.delta.dx *
-                                                          dampFactor);
-
-                                              // Convert back to 0-1 range and clamp
-                                              _topSliderPosition =
-                                                  (newPosInPixels /
-                                                          (contentWidth - 20.w))
-                                                      .clamp(0.0, 1.0);
-
-                                              // Update the detail view range based on new position
-                                              _updateDetailViewRange();
-                                            });
-                                          },
                                         ),
                                       ),
+                                    ),
+                                    SizedBox(height: 10.h),
 
-                                      // Zoom window indicator with heavier drag response
-                                      Positioned(
-                                        left: _topSliderPosition *
-                                                (contentWidth - 20.w) -
-                                            45.w,
-                                        top: 2.h,
-                                        child: GestureDetector(
-                                          onTapDown: (_) {
-                                            setState(() {
-                                              _isTopSliderActive = true;
-                                              _topSliderController.forward();
-                                            });
-                                          },
-                                          onTapUp: (_) {
-                                            setState(() {
-                                              _isTopSliderActive = false;
-                                              _topSliderController.reverse();
-                                            });
-                                          },
-                                          onPanStart: (_) {
-                                            setState(() {
-                                              _isTopSliderActive = true;
-                                              _topSliderController.forward();
-                                            });
-                                          },
-                                          onPanUpdate: (details) {
-                                            setState(() {
-                                              // Apply dampening factor for heavier feel
-                                              final dampFactor = 0.3;
-
-                                              // Current position in pixels
-                                              final currentPosInPixels =
-                                                  _topSliderPosition *
-                                                      (contentWidth - 20.w);
-
-                                              // Apply dampened movement
-                                              final newPosInPixels =
-                                                  currentPosInPixels +
-                                                      (details.delta.dx *
-                                                          dampFactor);
-
-                                              // Convert back to 0-1 range and clamp
-                                              _topSliderPosition =
-                                                  (newPosInPixels /
-                                                          (contentWidth - 20.w))
-                                                      .clamp(0.0, 1.0);
-
-                                              // Update the detail view range based on new position
-                                              _updateDetailViewRange();
-                                            });
-                                          },
-                                          onPanEnd: (_) {
-                                            setState(() {
-                                              _isTopSliderActive = false;
-                                              _topSliderController.reverse();
-                                            });
-                                          },
-                                          child: AnimatedBuilder(
-                                            animation: _topSliderAnimation,
-                                            builder: (context, child) {
-                                              return Transform.scale(
-                                                scale:
-                                                    _topSliderAnimation.value,
-                                                child: Container(
-                                                  width: 90.w,
-                                                  height: 31.h,
-                                                  decoration: BoxDecoration(
-                                                    border: Border.all(
-                                                      color: Colors.orange,
-                                                      width: 3.w,
+                                    // Main number line area (detailed view)
+                                    Container(
+                                      decoration: BoxDecoration(
+                                        color: const Color(
+                                            0xFF0B429A), // Darker blue background
+                                        borderRadius:
+                                            BorderRadius.circular(12.r),
+                                      ),
+                                      padding: EdgeInsets.symmetric(
+                                          vertical: 16.h, horizontal: 12.w),
+                                      child: Column(
+                                        children: [
+                                          // Labels at the top left and right (moved to be aligned with down triangle)
+                                          SizedBox(
+                                            height: 40.h,
+                                            child: Stack(
+                                              children: [
+                                                // Left label
+                                                Positioned(
+                                                  left: 0,
+                                                  top: 8
+                                                      .h, // Aligned with the triangle
+                                                  child: Text(
+                                                    _minValue
+                                                        .toInt()
+                                                        .toString(),
+                                                    style: TextStyle(
+                                                      color: AppColors
+                                                          .numberYellow,
+                                                      fontSize: 16.sp,
+                                                      fontWeight:
+                                                          FontWeight.bold,
                                                     ),
-                                                    color: Colors.blue
-                                                        .withOpacity(0.3),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            10.r),
                                                   ),
                                                 ),
-                                              );
-                                            },
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-
-                              SizedBox(height: 12.h),
-
-                              // Main number line area (detailed view)
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: const Color(
-                                      0xFF285498), // Darker blue background
-                                  borderRadius: BorderRadius.circular(12.r),
-                                ),
-                                padding: EdgeInsets.symmetric(
-                                    vertical: 16.h, horizontal: 12.w),
-                                child: Column(
-                                  children: [
-                                    // Labels at the top left and right (moved to be aligned with down triangle)
-                                    SizedBox(
-                                      height: 40.h,
-                                      child: Stack(
-                                        children: [
-                                          // Left label
-                                          Positioned(
-                                            left: 0,
-                                            top: 8
-                                                .h, // Aligned with the triangle
-                                            child: Text(
-                                              _minValue.toInt().toString(),
-                                              style: TextStyle(
-                                                color: AppColors.numberYellow,
-                                                fontSize: 16.sp,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                          ),
-                                          // Right label
-                                          Positioned(
-                                            right: 0,
-                                            top: 8
-                                                .h, // Aligned with the triangle
-                                            child: Text(
-                                              _maxValue.toInt().toString(),
-                                              style: TextStyle(
-                                                color: AppColors.numberYellow,
-                                                fontSize: 16.sp,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                          ),
-                                          // Down triangle (no circle, just triangle)
-                                          Positioned(
-                                            left: _downSliderPosition *
-                                                (contentWidth - 100.w),
-                                            top: 0,
-                                            child: GestureDetector(
-                                              onPanStart: (_) {
-                                                setState(() {
-                                                  _isDownSliderActive = true;
-                                                  _downSliderController
-                                                      .forward();
-                                                  _selectedValue =
-                                                      _getValueFromPosition(
-                                                          _downSliderPosition);
-                                                });
-                                              },
-                                              onPanUpdate: (details) {
-                                                setState(() {
-                                                  _downSliderPosition =
-                                                      (_downSliderPosition *
-                                                                      (contentWidth -
-                                                                          100
-                                                                              .w) +
-                                                                  details
-                                                                      .delta.dx)
-                                                              .clamp(
-                                                                  0.0,
-                                                                  contentWidth -
-                                                                      100.w) /
+                                                // Right label
+                                                Positioned(
+                                                  right: 0,
+                                                  top: 8
+                                                      .h, // Aligned with the triangle
+                                                  child: Text(
+                                                    _maxValue
+                                                        .toInt()
+                                                        .toString(),
+                                                    style: TextStyle(
+                                                      color: AppColors
+                                                          .numberYellow,
+                                                      fontSize: 16.sp,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                ),
+                                                // Down triangle (no circle, just triangle)
+                                                Positioned(
+                                                  left: _downSliderPosition *
                                                           (contentWidth -
-                                                              100.w);
-                                                  _selectedValue =
-                                                      _getValueFromPosition(
-                                                          _downSliderPosition);
-                                                });
-                                              },
-                                              onPanEnd: (_) {
-                                                setState(() {
-                                                  _isDownSliderActive = false;
-                                                  _downSliderController
-                                                      .reverse();
-                                                });
-                                              },
-                                              child: AnimatedBuilder(
-                                                  animation:
-                                                      _downSliderAnimation,
-                                                  builder: (context, child) {
-                                                    return Transform.scale(
-                                                      scale:
-                                                          _downSliderAnimation
-                                                              .value,
-                                                      child: ClipPath(
-                                                        clipper:
-                                                            TriangleClipper(
-                                                                isDown: true),
-                                                        child: Container(
-                                                          width: 30.w,
-                                                          height: 30.h,
-                                                          color: AppColors
-                                                              .trianglePointer,
-                                                        ),
-                                                      ),
-                                                    );
-                                                  }),
+                                                              100.w) -
+                                                      15.w,
+                                                  bottom: 0,
+                                                  child: GestureDetector(
+                                                    onPanStart: (_) {
+                                                      setState(() {
+                                                        _isDownSliderActive =
+                                                            true;
+                                                        _downSliderController
+                                                            .forward();
+                                                        _selectedValue =
+                                                            _getValueFromPosition(
+                                                                _downSliderPosition);
+                                                      });
+                                                    },
+                                                    onPanUpdate: (details) {
+                                                      setState(() {
+                                                        _downSliderPosition = (_downSliderPosition *
+                                                                        (contentWidth -
+                                                                            100
+                                                                                .w) +
+                                                                    details
+                                                                        .delta
+                                                                        .dx)
+                                                                .clamp(
+                                                                    0.0,
+                                                                    contentWidth -
+                                                                        100.w) /
+                                                            (contentWidth -
+                                                                100.w);
+                                                        _selectedValue =
+                                                            _getValueFromPosition(
+                                                                _downSliderPosition);
+                                                      });
+                                                    },
+                                                    onPanEnd: (_) {
+                                                      setState(() {
+                                                        _isDownSliderActive =
+                                                            false;
+                                                        _downSliderController
+                                                            .reverse();
+                                                      });
+                                                    },
+                                                    child: AnimatedBuilder(
+                                                        animation:
+                                                            _downSliderAnimation,
+                                                        builder:
+                                                            (context, child) {
+                                                          return Transform
+                                                              .scale(
+                                                            scale:
+                                                                _downSliderAnimation
+                                                                    .value,
+                                                            child: ClipPath(
+                                                              clipper:
+                                                                  TriangleClipper(
+                                                                      isDown:
+                                                                          true),
+                                                              child: Container(
+                                                                width: 30.w,
+                                                                height: 30.h,
+                                                                color: AppColors
+                                                                    .trianglePointer,
+                                                              ),
+                                                            ),
+                                                          );
+                                                        }),
+                                                  ),
+                                                ),
+                                              ],
                                             ),
                                           ),
-                                        ],
-                                      ),
-                                    ),
 
-                                    SizedBox(height: 8.h),
+                                          SizedBox(height: 2.h),
 
-                                    // Center line with tick marks - INCREASED HEIGHT
-                                    SizedBox(
-                                      height: 30.h,
-                                      child: Stack(
-                                        children: [
-                                          // Horizontal line
-                                          Positioned(
-                                            left: 0,
-                                            right: 0,
-                                            top: 14.h,
-                                            child: Container(
-                                              height: 2.h,
-                                              color: Colors.white,
+                                          // Center line with tick marks - INCREASED HEIGHT
+                                          SizedBox(
+                                            height: 30.h,
+                                            child: Stack(
+                                              children: [
+                                                // Horizontal line
+                                                Positioned(
+                                                  left: 0,
+                                                  right: 0,
+                                                  top: 14.h,
+                                                  child: Container(
+                                                    height: 2.h,
+                                                    color: Colors.white,
+                                                  ),
+                                                ),
+
+                                                // Tick marks
+                                                ...List.generate(11, (index) {
+                                                  return Positioned(
+                                                    left: index *
+                                                        (contentWidth - 100.w) /
+                                                        10,
+                                                    top: 9.h,
+                                                    child: Container(
+                                                      height: 12.h,
+                                                      width: 2.w,
+                                                      color: AppColors
+                                                          .numberYellow,
+                                                    ),
+                                                  );
+                                                }),
+                                              ],
                                             ),
                                           ),
 
-                                          // Tick marks
-                                          ...List.generate(11, (index) {
-                                            return Positioned(
-                                              left: index *
-                                                  (contentWidth - 100.w) /
-                                                  10,
-                                              top: 9.h,
-                                              child: Container(
-                                                height: 12.h,
-                                                width: 2.w,
-                                                color: AppColors.numberYellow,
-                                              ),
-                                            );
-                                          }),
-                                        ],
-                                      ),
-                                    ),
+                                          SizedBox(height: 8.h),
 
-                                    SizedBox(height: 8.h),
-
-                                    // Up triangle (no circle, just triangle) with shadow
-                                    SizedBox(
-                                      height: 40.h,
-                                      child: Stack(
-                                        clipBehavior: Clip.none,
-                                        children: [
-                                          // Shadow for the up triangle
-                                          Positioned(
-                                            left: (_upSliderPosition *
-                                                    (contentWidth - 100.w)) -
-                                                3.w, // Offset left for shadow
-                                            top: 3.h, // Offset down for shadow
-                                            child: ClipPath(
-                                              clipper: TriangleClipper(
-                                                  isDown: false),
-                                              child: Container(
-                                                width: 30.w,
-                                                height: 30.h,
-                                                color: Colors.black
-                                                    .withOpacity(0.3),
-                                              ),
-                                            ),
-                                          ),
-                                          // Up triangle
-                                          Positioned(
-                                            left: _upSliderPosition *
-                                                (contentWidth - 100.w),
-                                            top: 0,
-                                            child: GestureDetector(
-                                              onPanStart: (_) {
-                                                setState(() {
-                                                  _isUpSliderActive = true;
-                                                  _upSliderController.forward();
-                                                  _selectedValue =
-                                                      _getValueFromPosition(
-                                                          _upSliderPosition);
-                                                });
-                                              },
-                                              onPanUpdate: (details) {
-                                                setState(() {
-                                                  _upSliderPosition =
-                                                      (_upSliderPosition *
-                                                                      (contentWidth -
-                                                                          100
-                                                                              .w) +
-                                                                  details
-                                                                      .delta.dx)
-                                                              .clamp(
-                                                                  0.0,
-                                                                  contentWidth -
-                                                                      100.w) /
+                                          // Up triangle (no circle, just triangle) with shadow
+                                          SizedBox(
+                                            height: 40.h,
+                                            child: Stack(
+                                              clipBehavior: Clip.none,
+                                              children: [
+                                                // Shadow for the up triangle
+                                                Positioned(
+                                                  left: (_upSliderPosition *
                                                           (contentWidth -
-                                                              100.w);
-                                                  _selectedValue =
-                                                      _getValueFromPosition(
-                                                          _upSliderPosition);
-                                                });
-                                              },
-                                              onPanEnd: (_) {
-                                                setState(() {
-                                                  _isUpSliderActive = false;
-                                                  _upSliderController.reverse();
-                                                });
-                                              },
-                                              child: AnimatedBuilder(
-                                                  animation: _upSliderAnimation,
-                                                  builder: (context, child) {
-                                                    return Transform.scale(
-                                                      scale: _upSliderAnimation
-                                                          .value,
-                                                      child: ClipPath(
-                                                        clipper:
-                                                            TriangleClipper(
-                                                                isDown: false),
-                                                        child: Container(
-                                                          width: 30.w,
-                                                          height: 30.h,
-                                                          color: AppColors
-                                                              .trianglePointer,
-                                                        ),
-                                                      ),
-                                                    );
-                                                  }),
+                                                              100.w)) -
+                                                      3.w -
+                                                      15.w,
+                                                  top: 3.h,
+                                                  child: ClipPath(
+                                                    clipper: TriangleClipper(
+                                                        isDown: false),
+                                                    child: Container(
+                                                      width: 30.w,
+                                                      height: 30.h,
+                                                      color: Colors.black
+                                                          .withOpacity(0.3),
+                                                    ),
+                                                  ),
+                                                ),
+                                                // Up triangle
+                                                Positioned(
+                                                  left: _upSliderPosition *
+                                                          (contentWidth -
+                                                              100.w) -
+                                                      15.w,
+                                                  top: 0,
+                                                  child: GestureDetector(
+                                                    onPanStart: (_) {
+                                                      setState(() {
+                                                        _isUpSliderActive =
+                                                            true;
+                                                        _upSliderController
+                                                            .forward();
+                                                        _selectedValue =
+                                                            _getValueFromPosition(
+                                                                _upSliderPosition);
+                                                      });
+                                                    },
+                                                    onPanUpdate: (details) {
+                                                      setState(() {
+                                                        _upSliderPosition = (_upSliderPosition *
+                                                                        (contentWidth -
+                                                                            100
+                                                                                .w) +
+                                                                    details
+                                                                        .delta
+                                                                        .dx)
+                                                                .clamp(
+                                                                    0.0,
+                                                                    contentWidth -
+                                                                        100.w) /
+                                                            (contentWidth -
+                                                                100.w);
+                                                        _selectedValue =
+                                                            _getValueFromPosition(
+                                                                _upSliderPosition);
+                                                      });
+                                                    },
+                                                    onPanEnd: (_) {
+                                                      setState(() {
+                                                        _isUpSliderActive =
+                                                            false;
+                                                        _upSliderController
+                                                            .reverse();
+                                                      });
+                                                    },
+                                                    child: AnimatedBuilder(
+                                                        animation:
+                                                            _upSliderAnimation,
+                                                        builder:
+                                                            (context, child) {
+                                                          return Transform
+                                                              .scale(
+                                                            scale:
+                                                                _upSliderAnimation
+                                                                    .value,
+                                                            child: ClipPath(
+                                                              clipper:
+                                                                  TriangleClipper(
+                                                                      isDown:
+                                                                          false),
+                                                              child: Container(
+                                                                width: 30.w,
+                                                                height: 30.h,
+                                                                color: AppColors
+                                                                    .trianglePointer,
+                                                              ),
+                                                            ),
+                                                          );
+                                                        }),
+                                                  ),
+                                                ),
+                                              ],
                                             ),
                                           ),
                                         ],
                                       ),
                                     ),
+                                    SizedBox(height: 14.h),
                                   ],
                                 ),
-                              ),
-
-                              SizedBox(height: 44.h),
-
-                              // Check answer button at the center bottom
+                              ), // Check answer button at the center bottom
+                              SizedBox(height: 30.h),
                               Center(
                                 child: Container(
                                   width: 200.w,
@@ -953,7 +1011,7 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
                         // Feedback area (shows when checking answer)
                         if (_isCheckingAnswer)
                           Container(
-                            margin: EdgeInsets.only(top: 16.h),
+                            margin: EdgeInsets.only(top: 6.h),
                             padding: EdgeInsets.symmetric(vertical: 12.h),
                             width: double.infinity,
                             decoration: BoxDecoration(
@@ -967,7 +1025,7 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 color: Colors.white,
-                                fontSize: 20.sp,
+                                fontSize: 14.sp,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),

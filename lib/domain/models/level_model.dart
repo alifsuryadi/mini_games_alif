@@ -18,6 +18,7 @@ class LevelModel {
   final int maxValue;
   final int step;
   final bool isCompleted;
+  final bool isUnlocked;
   final int stars;
 
   LevelModel({
@@ -40,8 +41,59 @@ class LevelModel {
     required this.maxValue,
     required this.step,
     this.isCompleted = false,
+    this.isUnlocked = false,
     this.stars = 0,
   });
+
+  // Added copyWith method to allow immutable updates
+  LevelModel copyWith({
+    int? gameId,
+    String? gameName,
+    int? sectionId,
+    String? sectionName,
+    int? subSectionId,
+    int? levelId,
+    String? subSectionName,
+    String? levelDescription,
+    String? instructions,
+    String? gameDescription,
+    String? sectionDescription,
+    String? subSectionDescription,
+    String? gameIcon,
+    String? sectionIcon,
+    String? levelIcon,
+    int? minValue,
+    int? maxValue,
+    int? step,
+    bool? isCompleted,
+    bool? isUnlocked,
+    int? stars,
+  }) {
+    return LevelModel(
+      gameId: gameId ?? this.gameId,
+      gameName: gameName ?? this.gameName,
+      sectionId: sectionId ?? this.sectionId,
+      sectionName: sectionName ?? this.sectionName,
+      subSectionId: subSectionId ?? this.subSectionId,
+      levelId: levelId ?? this.levelId,
+      subSectionName: subSectionName ?? this.subSectionName,
+      levelDescription: levelDescription ?? this.levelDescription,
+      instructions: instructions ?? this.instructions,
+      gameDescription: gameDescription ?? this.gameDescription,
+      sectionDescription: sectionDescription ?? this.sectionDescription,
+      subSectionDescription:
+          subSectionDescription ?? this.subSectionDescription,
+      gameIcon: gameIcon ?? this.gameIcon,
+      sectionIcon: sectionIcon ?? this.sectionIcon,
+      levelIcon: levelIcon ?? this.levelIcon,
+      minValue: minValue ?? this.minValue,
+      maxValue: maxValue ?? this.maxValue,
+      step: step ?? this.step,
+      isCompleted: isCompleted ?? this.isCompleted,
+      isUnlocked: isUnlocked ?? this.isUnlocked,
+      stars: stars ?? this.stars,
+    );
+  }
 
   factory LevelModel.fromMap(Map<String, dynamic> map) {
     return LevelModel(
@@ -64,6 +116,7 @@ class LevelModel {
       maxValue: _parseMaxValue(map['Level desc'] ?? ''),
       step: _parseStep(map['Level desc'] ?? ''),
       isCompleted: false,
+      isUnlocked: map['Level'] == 1, // First level is unlocked by default
       stars: 0,
     );
   }

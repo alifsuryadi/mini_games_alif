@@ -8,7 +8,7 @@ class GameRepository {
   factory GameRepository() => _instance;
   GameRepository._internal();
 
-  // Mock data for the game
+  // Data for the game
   final List<LevelModel> _levels = [
     LevelModel(
       gameId: 3,
@@ -22,7 +22,7 @@ class GameRepository {
       instructions:
           'Locate and choose the right number on the number line to solve each challenge.',
       gameDescription:
-          'Solve number line challenges by placing numbers correctly to learn the concept of numerical order and values.',
+          'Learn to place numbers on a number line to understand numerical order and values.',
       sectionDescription:
           'Solve number placement challenges by positioning whole numbers correctly to learn the concept of numerical order.',
       subSectionDescription:
@@ -48,7 +48,7 @@ class GameRepository {
       instructions:
           'Locate and choose the right number on the number line to solve each challenge.',
       gameDescription:
-          'Solve number line challenges by placing numbers correctly to learn the concept of numerical order and values.',
+          'Learn to place numbers on a number line to understand numerical order and values.',
       sectionDescription:
           'Solve number placement challenges by positioning whole numbers correctly to learn the concept of numerical order.',
       subSectionDescription:
@@ -74,7 +74,7 @@ class GameRepository {
       instructions:
           'Locate and choose the right number on the number line to solve each challenge.',
       gameDescription:
-          'Solve number line challenges by placing numbers correctly to learn the concept of numerical order and values.',
+          'Learn to place numbers on a number line to understand numerical order and values.',
       sectionDescription:
           'Solve number placement challenges by positioning whole numbers correctly to learn the concept of numerical order.',
       subSectionDescription:
@@ -85,6 +85,58 @@ class GameRepository {
       minValue: 0,
       maxValue: 20,
       step: 2,
+      isCompleted: false,
+      stars: 0,
+    ),
+    LevelModel(
+      gameId: 3,
+      gameName: 'Number Line',
+      sectionId: 1,
+      sectionName: 'Numbers',
+      subSectionId: 2,
+      levelId: 4,
+      subSectionName: 'Number range: 0 to 100',
+      levelDescription: '0 to 50 by steps of 5',
+      instructions:
+          'Locate and choose the right number on the number line to solve each challenge.',
+      gameDescription:
+          'Learn to place numbers on a number line to understand numerical order and values.',
+      sectionDescription:
+          'Solve number placement challenges by positioning whole numbers correctly to learn the concept of numerical order.',
+      subSectionDescription:
+          'Represent and arrange larger numbers on a number line to develop number sense.',
+      gameIcon: 'Game Icon Number Line',
+      sectionIcon: 'range_0_100',
+      levelIcon: 'nb_04',
+      minValue: 0,
+      maxValue: 50,
+      step: 5,
+      isCompleted: false,
+      stars: 0,
+    ),
+    LevelModel(
+      gameId: 3,
+      gameName: 'Number Line',
+      sectionId: 1,
+      sectionName: 'Numbers',
+      subSectionId: 2,
+      levelId: 5,
+      subSectionName: 'Number range: 0 to 100',
+      levelDescription: '50 to 100 by steps of 5',
+      instructions:
+          'Locate and choose the right number on the number line to solve each challenge.',
+      gameDescription:
+          'Learn to place numbers on a number line to understand numerical order and values.',
+      sectionDescription:
+          'Solve number placement challenges by positioning whole numbers correctly to learn the concept of numerical order.',
+      subSectionDescription:
+          'Represent and arrange larger numbers on a number line to develop number sense.',
+      gameIcon: 'Game Icon Number Line',
+      sectionIcon: 'range_0_100',
+      levelIcon: 'nb_05',
+      minValue: 50,
+      maxValue: 100,
+      step: 5,
       isCompleted: false,
       stars: 0,
     ),
@@ -163,28 +215,21 @@ class GameRepository {
   void updateLevelCompletion(int levelId, bool isCompleted, int stars) {
     final index = _levels.indexWhere((level) => level.levelId == levelId);
     if (index != -1) {
-      _levels[index] = LevelModel(
-        gameId: _levels[index].gameId,
-        gameName: _levels[index].gameName,
-        sectionId: _levels[index].sectionId,
-        sectionName: _levels[index].sectionName,
-        subSectionId: _levels[index].subSectionId,
-        levelId: _levels[index].levelId,
-        subSectionName: _levels[index].subSectionName,
-        levelDescription: _levels[index].levelDescription,
-        instructions: _levels[index].instructions,
-        gameDescription: _levels[index].gameDescription,
-        sectionDescription: _levels[index].sectionDescription,
-        subSectionDescription: _levels[index].subSectionDescription,
-        gameIcon: _levels[index].gameIcon,
-        sectionIcon: _levels[index].sectionIcon,
-        levelIcon: _levels[index].levelIcon,
-        minValue: _levels[index].minValue,
-        maxValue: _levels[index].maxValue,
-        step: _levels[index].step,
+      // Update current level
+      _levels[index] = _levels[index].copyWith(
         isCompleted: isCompleted,
         stars: stars,
       );
+
+      // If this level is completed successfully, unlock the next level
+      if (isCompleted && index < _levels.length - 1) {
+        // Only update the next level if it's not already completed
+        if (!_levels[index + 1].isCompleted) {
+          _levels[index + 1] = _levels[index + 1].copyWith(
+            isUnlocked: true,
+          );
+        }
+      }
     }
   }
 }
