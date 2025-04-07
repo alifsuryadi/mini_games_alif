@@ -1,4 +1,4 @@
-// This is the modified game_page.dart with the int to double conversion fix
+// Modified game_page.dart with dynamic number range based on slider position
 
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -35,18 +35,31 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
   double _downSliderPosition = 0.5; // Down triangle slider
   double _upSliderPosition = 0.5; // Up triangle slider
 
+  // Target positions for animated snapping
+  double _downSliderTargetPosition = 0.5;
+  double _upSliderTargetPosition = 0.5;
+
+  // Animation controllers for slider snapping animation
+  late AnimationController _downSliderSnapController;
+  late AnimationController _upSliderSnapController;
+  late Animation<double> _downSliderSnapAnimation;
+  late Animation<double> _upSliderSnapAnimation;
+
   // State for active sliders
   bool _isTopSliderActive = false;
   bool _isDownSliderActive = false;
   bool _isUpSliderActive = false;
 
-  // Number line values - explicitly define these as double to avoid type errors
-  double _minValue = 1650.0;
-  double _maxValue = 1660.0;
+  // Number line values - we'll make these dynamic based on slider position
+  double _minValue = 0.0;
+  double _maxValue = 0.0;
 
-  // Zoom range (the overall range for the zoomed-out view) - converted to double
+  // Zoom range (the overall range for the zoomed-out view)
   double _minOverallValue = 1600.0;
   double _maxOverallValue = 1700.0;
+
+  // Zoom window size (the width of the visible range in the detail view)
+  double _zoomWindowSize = 10.0;
 
   // Animation controllers for hover effects
   late AnimationController _topSliderController;
@@ -56,7 +69,6 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
   late Animation<double> _downSliderAnimation;
   late Animation<double> _upSliderAnimation;
 
-// Update the animation controller speed in initState()
   @override
   void initState() {
     super.initState();
@@ -75,7 +87,17 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
       duration: const Duration(milliseconds: 200),
     );
 
-    // Define animations
+    // Initialize snap animation controllers
+    _downSliderSnapController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _upSliderSnapController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+
+    // Define hover animations
     _topSliderAnimation = Tween<double>(begin: 1.0, end: 1.2).animate(
         CurvedAnimation(parent: _topSliderController, curve: Curves.easeOut));
     _downSliderAnimation = Tween<double>(begin: 1.0, end: 1.2).animate(
@@ -83,14 +105,116 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
     _upSliderAnimation = Tween<double>(begin: 1.0, end: 1.2).animate(
         CurvedAnimation(parent: _upSliderController, curve: Curves.easeOut));
 
+    // The snap animations will be initialized later when we know the start and end positions
+    _downSliderSnapAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+        CurvedAnimation(
+            parent: _downSliderSnapController, curve: Curves.easeOutBack));
+    _upSliderSnapAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+        CurvedAnimation(
+            parent: _upSliderSnapController, curve: Curves.easeOutBack));
+
+    // Add snap animation listeners
+    _downSliderSnapController.addListener(_updateDownSliderSnap);
+    _upSliderSnapController.addListener(_updateUpSliderSnap);
+
     // Set initial position to match the main number line values
-    // This puts the view at the middle of our detailed number line
-    _topSliderPosition =
-        (_minValue - _minOverallValue) / (_maxOverallValue - _minOverallValue);
+    _topSliderPosition = 0.5; // Start in the middle
+    _downSliderTargetPosition = 0.5;
+    _upSliderTargetPosition = 0.5;
+
+    // Calculate the initial min and max values for the detail view
+    _updateDetailViewRange();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeGame();
     });
+  }
+
+  // Calculate the min and max values for the detail view based on top slider position
+  void _updateDetailViewRange() {
+    // Calculate center value based on slider position
+    double centerValue = _minOverallValue +
+        (_maxOverallValue - _minOverallValue) * _topSliderPosition;
+
+    // Calculate min and max values based on center and zoom window size
+    _minValue = centerValue - _zoomWindowSize / 2;
+    _maxValue = centerValue + _zoomWindowSize / 2;
+
+    // Ensure min and max stay within overall range
+    if (_minValue < _minOverallValue) {
+      _minValue = _minOverallValue;
+      _maxValue = _minOverallValue + _zoomWindowSize;
+    }
+    if (_maxValue > _maxOverallValue) {
+      _maxValue = _maxOverallValue;
+      _minValue = _maxOverallValue - _zoomWindowSize;
+    }
+  }
+
+  // Snap animation update listeners
+  void _updateDownSliderSnap() {
+    if (!_downSliderSnapController.isAnimating) return;
+
+    setState(() {
+      double startPosition =
+          _downSliderSnapAnimation.value == 0 ? _downSliderPosition : 0;
+      double endPosition = _downSliderTargetPosition;
+      _downSliderPosition = startPosition +
+          (_downSliderSnapAnimation.value * (endPosition - startPosition));
+    });
+  }
+
+  void _updateUpSliderSnap() {
+    if (!_upSliderSnapController.isAnimating) return;
+
+    setState(() {
+      double startPosition =
+          _upSliderSnapAnimation.value == 0 ? _upSliderPosition : 0;
+      double endPosition = _upSliderTargetPosition;
+      _upSliderPosition = startPosition +
+          (_upSliderSnapAnimation.value * (endPosition - startPosition));
+    });
+  }
+
+  // Find the nearest tick mark position (0-1 range)
+  double _findNearestTickPosition(double currentPosition) {
+    // For 11 tick marks (0-10 inclusive), we have 10 segments
+    int nearestTick = (currentPosition * 10).round();
+    return nearestTick / 10;
+  }
+
+  // Animate slider to snap to nearest tick mark
+  void _snapDownSliderToNearestTick() {
+    _downSliderTargetPosition = _findNearestTickPosition(_downSliderPosition);
+
+    // Configure animation
+    _downSliderSnapController.reset();
+    _downSliderSnapAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _downSliderSnapController,
+      curve: Curves.easeOutBack,
+    ));
+
+    _downSliderSnapController.forward();
+  }
+
+  // Animate slider to snap to nearest tick mark
+  void _snapUpSliderToNearestTick() {
+    _upSliderTargetPosition = _findNearestTickPosition(_upSliderPosition);
+
+    // Configure animation
+    _upSliderSnapController.reset();
+    _upSliderSnapAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _upSliderSnapController,
+      curve: Curves.easeOutBack,
+    ));
+
+    _upSliderSnapController.forward();
   }
 
   @override
@@ -98,6 +222,8 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
     _topSliderController.dispose();
     _downSliderController.dispose();
     _upSliderController.dispose();
+    _downSliderSnapController.dispose();
+    _upSliderSnapController.dispose();
     super.dispose();
   }
 
@@ -298,7 +424,7 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
                         ),
 
                         SizedBox(height: 12.h),
-                        // Outer container with border and shadow - CHANGED COLOR FROM 0xFF4C77B9 to 0xFF285498
+                        // Outer container with border and shadow
                         Container(
                           width: double.infinity,
                           decoration: BoxDecoration(
@@ -433,19 +559,20 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
                                                   (newPosInPixels /
                                                           (contentWidth - 20.w))
                                                       .clamp(0.0, 1.0);
+
+                                              // Update the detail view range based on new position
+                                              _updateDetailViewRange();
                                             });
                                           },
                                         ),
                                       ),
 
                                       // Zoom window indicator with heavier drag response
-
                                       Positioned(
                                         left: _topSliderPosition *
                                                 (contentWidth - 20.w) -
                                             45.w,
-                                        top: 2
-                                            .h, // Changed to align with the top of the container
+                                        top: 2.h,
                                         child: GestureDetector(
                                           onTapDown: (_) {
                                             setState(() {
@@ -486,6 +613,9 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
                                                   (newPosInPixels /
                                                           (contentWidth - 20.w))
                                                       .clamp(0.0, 1.0);
+
+                                              // Update the detail view range based on new position
+                                              _updateDetailViewRange();
                                             });
                                           },
                                           onPanEnd: (_) {
@@ -502,8 +632,7 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
                                                     _topSliderAnimation.value,
                                                 child: Container(
                                                   width: 90.w,
-                                                  height: 31
-                                                      .h, // Changed to match the container's height (SizedBox height)
+                                                  height: 31.h,
                                                   decoration: BoxDecoration(
                                                     border: Border.all(
                                                       color: Colors.orange,
@@ -646,16 +775,14 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
 
                                     // Center line with tick marks - INCREASED HEIGHT
                                     SizedBox(
-                                      height: 30
-                                          .h, // Increased from 20.h to 30.h for more space
+                                      height: 30.h,
                                       child: Stack(
                                         children: [
                                           // Horizontal line
                                           Positioned(
                                             left: 0,
                                             right: 0,
-                                            top: 14
-                                                .h, // Centered in the increased height
+                                            top: 14.h,
                                             child: Container(
                                               height: 2.h,
                                               color: Colors.white,
@@ -668,11 +795,9 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
                                               left: index *
                                                   (contentWidth - 100.w) /
                                                   10,
-                                              top: 9
-                                                  .h, // Adjusted for the new height
+                                              top: 9.h,
                                               child: Container(
-                                                height: 12
-                                                    .h, // Increased from 10.h to 12.h
+                                                height: 12.h,
                                                 width: 2.w,
                                                 color: AppColors.numberYellow,
                                               ),
@@ -776,22 +901,18 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
                                 ),
                               ),
 
-                              // MOVED: Check answer button to the center of the bottom part of the card
                               SizedBox(height: 44.h),
 
                               // Check answer button at the center bottom
                               Center(
                                 child: Container(
-                                  width: 200
-                                      .w, // Limiting width for center alignment
+                                  width: 200.w,
                                   height: 56.h,
                                   decoration: BoxDecoration(
-                                    color: const Color(
-                                        0xFF83E6B8), // Changed from AppColors.checkAnswerButton to #83E6B8
+                                    color: const Color(0xFF83E6B8),
                                     borderRadius: BorderRadius.circular(28.r),
                                     border: Border.all(
-                                      color: const Color(
-                                          0xFF59B94D), // Changed border color to #59B94D
+                                      color: const Color(0xFF59B94D),
                                       width: 2.w,
                                     ),
                                     boxShadow: [
@@ -819,8 +940,7 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
                                       style: TextStyle(
                                         fontSize: 16.sp,
                                         fontWeight: FontWeight.bold,
-                                        color: const Color(
-                                            0xFF59B94D), // Changed text color to match border
+                                        color: const Color(0xFF59B94D),
                                       ),
                                     ),
                                   ),
@@ -856,8 +976,6 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
                     ),
                   ),
                 ),
-
-                // REMOVED: Check answer button from here as it's now inside the card content above
               ],
             ),
           ),
