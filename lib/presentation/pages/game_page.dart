@@ -1,5 +1,3 @@
-// Modified game_page.dart with dynamic number range based on slider position
-
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:mini_games_alif/core/styles/app_colors.dart';
@@ -234,6 +232,16 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
 
     _level = _repository.getLevelById(levelId)!;
     _questions = _repository.getQuestionsForLevel(levelId, count: 5);
+
+    // Fix for the error - Convert integer to double explicitly
+    _zoomWindowSize = (_level.maxValue - _level.minValue).toDouble();
+
+    // Set the overall range based on the level
+    _minOverallValue = _level.minValue.toDouble();
+    _maxOverallValue = _level.maxValue.toDouble();
+
+    // Update the detail view range
+    _updateDetailViewRange();
 
     setState(() {});
   }
@@ -842,8 +850,18 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
                                                     child: Container(
                                                       height: 12.h,
                                                       width: 2.w,
-                                                      color: AppColors
-                                                          .numberYellow,
+                                                      color: _isCheckingAnswer &&
+                                                              index ==
+                                                                  (_downSliderPosition *
+                                                                          10)
+                                                                      .round()
+                                                          ? (_isCorrect
+                                                              ? AppColors
+                                                                  .correctFeedback
+                                                              : AppColors
+                                                                  .incorrectFeedback)
+                                                          : AppColors
+                                                              .numberYellow,
                                                     ),
                                                   );
                                                 }),
@@ -923,6 +941,7 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
                                                             false;
                                                         _upSliderController
                                                             .reverse();
+                                                        _snapUpSliderToNearestTick();
                                                       });
                                                     },
                                                     child: AnimatedBuilder(
@@ -943,14 +962,60 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
                                                               child: Container(
                                                                 width: 30.w,
                                                                 height: 30.h,
-                                                                color: AppColors
-                                                                    .trianglePointer,
+                                                                color: _isCheckingAnswer
+                                                                    ? (_isCorrect
+                                                                        ? AppColors
+                                                                            .correctFeedback
+                                                                        : AppColors
+                                                                            .incorrectFeedback)
+                                                                    : AppColors
+                                                                        .trianglePointer,
                                                               ),
                                                             ),
                                                           );
                                                         }),
                                                   ),
                                                 ),
+
+                                                // Display selected value when dragging
+                                                if (_isDownSliderActive ||
+                                                    _isUpSliderActive)
+                                                  Positioned(
+                                                    left: (_isDownSliderActive
+                                                                ? _downSliderPosition
+                                                                : _upSliderPosition) *
+                                                            (contentWidth -
+                                                                100.w) -
+                                                        20.w,
+                                                    top: (_isDownSliderActive
+                                                        ? -30.h
+                                                        : 35.h),
+                                                    child: Container(
+                                                      padding:
+                                                          EdgeInsets.symmetric(
+                                                        horizontal: 8.w,
+                                                        vertical: 4.h,
+                                                      ),
+                                                      decoration: BoxDecoration(
+                                                        color: AppColors
+                                                            .numberPink,
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(8.r),
+                                                      ),
+                                                      child: Text(
+                                                        _selectedValue
+                                                                ?.toString() ??
+                                                            '',
+                                                        style: TextStyle(
+                                                          color: Colors.white,
+                                                          fontSize: 14.sp,
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
                                               ],
                                             ),
                                           ),
@@ -967,10 +1032,18 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
                                   width: 200.w,
                                   height: 56.h,
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF83E6B8),
+                                    color: _isCheckingAnswer
+                                        ? (_isCorrect
+                                            ? AppColors.correctFeedback
+                                            : AppColors.incorrectFeedback)
+                                        : const Color(0xFF83E6B8),
                                     borderRadius: BorderRadius.circular(28.r),
                                     border: Border.all(
-                                      color: const Color(0xFF59B94D),
+                                      color: _isCheckingAnswer
+                                          ? (_isCorrect
+                                              ? const Color(0xFF66CC66)
+                                              : const Color(0xFFCC3333))
+                                          : const Color(0xFF59B94D),
                                       width: 2.w,
                                     ),
                                     boxShadow: [
@@ -994,11 +1067,17 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
                                       ),
                                     ),
                                     child: Text(
-                                      'Check Answer',
+                                      _isCheckingAnswer
+                                          ? (_isCorrect
+                                              ? 'Correct!'
+                                              : 'Try Again')
+                                          : 'Check Answer',
                                       style: TextStyle(
                                         fontSize: 16.sp,
                                         fontWeight: FontWeight.bold,
-                                        color: const Color(0xFF59B94D),
+                                        color: _isCheckingAnswer
+                                            ? Colors.white
+                                            : const Color(0xFF59B94D),
                                       ),
                                     ),
                                   ),
