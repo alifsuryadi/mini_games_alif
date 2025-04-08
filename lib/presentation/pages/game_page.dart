@@ -28,6 +28,10 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
   int _score = 0;
   int _stars = 0;
 
+  // Tutorial state
+  bool _isTutorialMode = false;
+  int _tutorialStep = 0;
+
   // Variables for the number line
   double _topSliderPosition = 0.5; // Temperature-like slider
   double _downSliderPosition = 0.5; // Down triangle slider
@@ -233,6 +237,13 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
     _level = _repository.getLevelById(levelId)!;
     _questions = _repository.getQuestionsForLevel(levelId, count: 5);
 
+    // Set tutorial mode for level 0
+    _isTutorialMode = levelId == 0;
+    _tutorialStep = 0;
+
+    // Set initial slider positions based on question type
+    _setupInitialSliderPositions();
+
     // Fix for the error - Convert integer to double explicitly
     _zoomWindowSize = (_level.maxValue - _level.minValue).toDouble();
 
@@ -246,9 +257,82 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
     setState(() {});
   }
 
+  void _setupInitialSliderPositions() {
+    if (_questions.isEmpty) return;
+
+    final question = _questions[_currentQuestionIndex];
+
+    switch (question.questionType) {
+      case QuestionType.directIdentification:
+        // Position both sliders at the same place
+        _downSliderPosition = 0.5;
+        _upSliderPosition = 0.5;
+        break;
+
+      case QuestionType.addition:
+        // If there's an operand1, position down slider there
+        if (question.operand1 != null) {
+          // Calculate the relative position on the number line
+          final totalRange = _level.maxValue - _level.minValue;
+          final relativePos =
+              ((question.operand1! - _level.minValue) / totalRange)
+                  .clamp(0.0, 1.0);
+          _downSliderPosition = relativePos;
+          _upSliderPosition = relativePos; // Start both at same position
+        }
+        break;
+
+      case QuestionType.subtraction:
+        // If there's an operand1, position down slider there
+        if (question.operand1 != null) {
+          final totalRange = _level.maxValue - _level.minValue;
+          final relativePos =
+              ((question.operand1! - _level.minValue) / totalRange)
+                  .clamp(0.0, 1.0);
+          _downSliderPosition = relativePos;
+          _upSliderPosition = relativePos; // Start both at same position
+        }
+        break;
+
+      case QuestionType.midpoint:
+        // If there are both operands, position sliders at respective points
+        if (question.operand1 != null && question.operand2 != null) {
+          final totalRange = _level.maxValue - _level.minValue;
+          final relativePos1 =
+              ((question.operand1! - _level.minValue) / totalRange)
+                  .clamp(0.0, 1.0);
+          final relativePos2 =
+              ((question.operand2! - _level.minValue) / totalRange)
+                  .clamp(0.0, 1.0);
+          _downSliderPosition = relativePos1;
+          _upSliderPosition = relativePos2;
+        }
+        break;
+
+      case QuestionType.gcf:
+        // For GCF, place sliders in default position
+        _downSliderPosition = 0.3;
+        _upSliderPosition = 0.7;
+        break;
+
+      default:
+        _downSliderPosition = 0.5;
+        _upSliderPosition = 0.5;
+    }
+  }
+
   int _getValueFromPosition(double position) {
-    // Use .toDouble() to ensure proper calculation, then round to int
-    return (_minValue + ((_maxValue - _minValue) * position)).round();
+    // Calculate value at position on number line
+    final rangeSize = _maxValue - _minValue;
+    final rawValue = _minValue + (rangeSize * position);
+
+    // For direct number identification, we want exact steps
+    if (_level.step > 1) {
+      // Round to nearest step
+      return ((rawValue / _level.step).round() * _level.step);
+    }
+
+    return rawValue.round();
   }
 
   // Calculate visible range for zoomed-out view
@@ -264,18 +348,65 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
   }
 
   void _checkAnswer() {
-    if (_selectedValue == null) {
-      // Use the position of a slider if no value is explicitly selected
-      _selectedValue = _getValueFromPosition(_downSliderPosition);
-    }
+    if (_questions.isEmpty) return;
 
-    // Calculate GCF (for this example using a fixed value)
-    final correctAnswer =
-        826; // In a real app: _numberLineUseCase.calculateHCF(1654, 826);
+    final question = _questions[_currentQuestionIndex];
+    int? correctAnswer;
+
+    switch (question.questionType) {
+      case QuestionType.directIdentification:
+        // For direct identification, the answer is simply the target number
+        correctAnswer = question.correctAnswer;
+        _isCorrect =
+            _getValueFromPosition(_downSliderPosition) == correctAnswer &&
+                _getValueFromPosition(_upSliderPosition) == correctAnswer;
+        break;
+
+      case QuestionType.addition:
+        // For addition, down triangle should be at first operand, up triangle at sum
+        if (question.operand1 != null) {
+          correctAnswer = question.correctAnswer;
+          _isCorrect =
+              _getValueFromPosition(_downSliderPosition) == question.operand1 &&
+                  _getValueFromPosition(_upSliderPosition) == correctAnswer;
+        }
+        break;
+
+      case QuestionType.subtraction:
+        // For subtraction, down triangle should be at minuend, up triangle at difference
+        if (question.operand1 != null) {
+          correctAnswer = question.correctAnswer;
+          _isCorrect =
+              _getValueFromPosition(_downSliderPosition) == question.operand1 &&
+                  _getValueFromPosition(_upSliderPosition) == correctAnswer;
+        }
+        break;
+
+      case QuestionType.midpoint:
+        // For midpoint, down triangle should be at lower number, up triangle at upper number
+        if (question.operand1 != null && question.operand2 != null) {
+          // The midpoint itself is the correct answer, but we need both triangles positioned correctly
+          _isCorrect =
+              _getValueFromPosition(_downSliderPosition) == question.operand1 &&
+                  _getValueFromPosition(_upSliderPosition) == question.operand2;
+        }
+        break;
+
+      case QuestionType.gcf:
+        // For GCF, either triangle should be at the correct answer
+        correctAnswer = question.correctAnswer;
+        _isCorrect =
+            _getValueFromPosition(_downSliderPosition) == correctAnswer ||
+                _getValueFromPosition(_upSliderPosition) == correctAnswer;
+        break;
+
+      default:
+        _isCorrect = false;
+    }
 
     setState(() {
       _isCheckingAnswer = true;
-      _isCorrect = _selectedValue == correctAnswer;
+      _selectedValue = _getValueFromPosition(_upSliderPosition);
 
       if (_isCorrect) {
         _score += 20; // 20 points for each correct answer
@@ -292,6 +423,7 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
 
         if (_currentQuestionIndex < _questions.length - 1) {
           _currentQuestionIndex++;
+          _setupInitialSliderPositions(); // Set positions for new question
         } else {
           _completeLevel();
         }
@@ -369,6 +501,263 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
     );
   }
 
+  // Advance to next tutorial step
+  void _advanceTutorial() {
+    setState(() {
+      _tutorialStep++;
+      if (_tutorialStep > 3) {
+        // After all 4 tutorial steps
+        _tutorialStep = 0; // Reset for next question
+        _isTutorialMode = false; // Exit tutorial mode
+      }
+    });
+  }
+
+  // Return tutorial content for the current step
+  Widget _buildTutorialOverlay() {
+    if (!_isTutorialMode || _questions.isEmpty) return const SizedBox.shrink();
+
+    final question = _questions[_currentQuestionIndex];
+    final screenSize = MediaQuery.of(context).size;
+
+    // Determine tutorial content based on step and question type
+    String title = '';
+    String content = '';
+    Offset targetPosition = const Offset(0.5, 0.5);
+    bool arrowDown = true;
+    bool highlightWidget = false;
+
+    switch (question.questionType) {
+      case QuestionType.directIdentification:
+        // Tutorial for direct identification
+        switch (_tutorialStep) {
+          case 0:
+            title = 'Selamat Datang di Number Line!';
+            content =
+                'Pada permainan ini, kamu akan belajar menempatkan angka pada garis bilangan.';
+            targetPosition = Offset(0.5, 0.3);
+            arrowDown = true;
+            break;
+          case 1:
+            title = 'Perhatikan Pertanyaan';
+            content =
+                'Baca pertanyaan dengan teliti. Kamu perlu menempatkan marker pada posisi angka yang benar.';
+            targetPosition = Offset(0.5, 0.2);
+            arrowDown = true;
+            highlightWidget = true;
+            break;
+          case 2:
+            title = 'Geser Marker';
+            content =
+                'Geser segitiga merah muda untuk menandai jawaban. Kedua segitiga harus ditempatkan pada posisi yang sama.';
+            targetPosition = Offset(0.5, 0.6);
+            arrowDown = false;
+            highlightWidget = true;
+            break;
+          case 3:
+            title = 'Periksa Jawaban';
+            content =
+                'Setelah yakin dengan jawaban, tekan tombol "Check Answer" untuk memeriksa jawaban.';
+            targetPosition = Offset(0.5, 0.85);
+            arrowDown = false;
+            highlightWidget = true;
+            break;
+        }
+        break;
+
+      case QuestionType.addition:
+        // Tutorial for addition
+        switch (_tutorialStep) {
+          case 0:
+            title = 'Soal Penjumlahan';
+            content =
+                'Pada soal penjumlahan, kamu akan menggunakan garis bilangan untuk menunjukkan hasil penjumlahan.';
+            targetPosition = Offset(0.5, 0.25);
+            arrowDown = true;
+            break;
+          case 1:
+            title = 'Bilangan Pertama';
+            content =
+                'Segitiga bawah sudah ditempatkan pada bilangan pertama dalam soal penjumlahan.';
+            targetPosition = Offset(0.3, 0.5);
+            arrowDown = false;
+            highlightWidget = true;
+            break;
+          case 2:
+            title = 'Temukan Hasil Penjumlahan';
+            content =
+                'Geser segitiga atas ke posisi yang menunjukkan hasil penjumlahan kedua bilangan tersebut.';
+            targetPosition = Offset(0.7, 0.6);
+            arrowDown = false;
+            highlightWidget = true;
+            break;
+          case 3:
+            title = 'Periksa Jawaban';
+            content =
+                'Setelah segitiga atas ditempatkan pada hasil penjumlahan, tekan tombol "Check Answer".';
+            targetPosition = Offset(0.5, 0.85);
+            arrowDown = false;
+            highlightWidget = true;
+            break;
+        }
+        break;
+
+      // Add cases for other question types if needed
+
+      default:
+        // Default tutorial
+        switch (_tutorialStep) {
+          case 0:
+            title = 'Selamat Datang di Number Line!';
+            content =
+                'Pada permainan ini, kamu akan belajar menempatkan angka pada garis bilangan.';
+            targetPosition = Offset(0.5, 0.3);
+            arrowDown = true;
+            break;
+          case 1:
+            title = 'Zoom Slider';
+            content =
+                'Gunakan slider atas dengan kotak oranye untuk memperbesar bagian tertentu dari garis bilangan.';
+            targetPosition = Offset(0.5, 0.2);
+            arrowDown = true;
+            highlightWidget = true;
+            break;
+          case 2:
+            title = 'Segitiga Penanda';
+            content =
+                'Geser segitiga merah muda untuk menandai jawaban sesuai dengan yang diminta.';
+            targetPosition = Offset(0.5, 0.6);
+            arrowDown = false;
+            highlightWidget = true;
+            break;
+          case 3:
+            title = 'Periksa Jawaban';
+            content =
+                'Setelah yakin dengan jawaban, tekan tombol "Check Answer" untuk memeriksa jawaban.';
+            targetPosition = Offset(0.5, 0.85);
+            arrowDown = false;
+            highlightWidget = true;
+            break;
+        }
+    }
+
+    // Build the tutorial overlay
+    return Stack(
+      children: [
+        // Semi-transparent background
+        Positioned.fill(
+          child: GestureDetector(
+            onTap: _advanceTutorial,
+            child: Container(
+              color: Colors.black.withOpacity(0.7),
+            ),
+          ),
+        ),
+
+        // Target position highlight
+        if (highlightWidget)
+          Positioned(
+            left: targetPosition.dx * screenSize.width - 40.w,
+            top: targetPosition.dy * screenSize.height - 40.h,
+            child: Container(
+              width: 80.w,
+              height: 80.h,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Colors.white,
+                  width: 3.w,
+                ),
+              ),
+            ),
+          ),
+
+        // Tutorial message box
+        Positioned(
+          left: 20.w,
+          right: 20.w,
+          bottom: arrowDown ? 120.h : 20.h,
+          top: !arrowDown ? 120.h : null,
+          child: Container(
+            padding: EdgeInsets.all(16.w),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16.r),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    color: AppColors.primary,
+                    fontSize: 18.sp,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: 8.h),
+                Text(
+                  content,
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 14.sp,
+                  ),
+                ),
+                SizedBox(height: 16.h),
+                GestureDetector(
+                  onTap: _advanceTutorial,
+                  child: Container(
+                    padding:
+                        EdgeInsets.symmetric(vertical: 8.h, horizontal: 24.w),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      borderRadius: BorderRadius.circular(20.r),
+                    ),
+                    child: Text(
+                      'Selanjutnya',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14.sp,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        // Arrow pointing to target
+        if (arrowDown)
+          Positioned(
+            left: targetPosition.dx * screenSize.width - 10.w,
+            bottom: (1 - targetPosition.dy) * screenSize.height,
+            child: CustomPaint(
+              size: Size(20.w, 30.h),
+              painter: ArrowPainter(isDown: true),
+            ),
+          )
+        else
+          Positioned(
+            left: targetPosition.dx * screenSize.width - 10.w,
+            top: targetPosition.dy * screenSize.height,
+            child: CustomPaint(
+              size: Size(20.w, 30.h),
+              painter: ArrowPainter(isDown: false),
+            ),
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     AppSizes.init(context, 1.0);
@@ -381,6 +770,9 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
       );
     }
 
+    // Get current question
+    final currentQuestion = _questions[_currentQuestionIndex];
+
     // Calculate the width of the content area
     final contentWidth = MediaQuery.of(context).size.width - 32.w;
 
@@ -390,732 +782,858 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
     return Scaffold(
       backgroundColor: const Color(0xFFE6F0FF), // Light blue background
       body: SafeArea(
-        child: Padding(
-          padding: EdgeInsets.all(16.w),
-          child: Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFFA1C0F2),
-              borderRadius: BorderRadius.circular(16.r),
-              border: Border.all(
-                color: CardColors.blue.shadow,
-                width: 2.w,
-              ),
-            ),
-            child: Column(
-              children: [
-                // Main game content
-                Expanded(
-                  child: Padding(
-                    padding:
-                        EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        // Question text
-                        Container(
-                          width: double.infinity,
-                          padding: EdgeInsets.symmetric(
-                              vertical: 16.h, horizontal: 16.w),
-                          decoration: BoxDecoration(
-                            color: AppColors.questionBackground,
-                            borderRadius: BorderRadius.circular(16.r),
-                          ),
-                          child: Text(
-                            'What is the highest\nGreatest Common Factor\nbetween these 2 values:',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: AppColors.instructionText,
-                              fontSize: 16.sp,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-
-                        SizedBox(height: 12.h),
-                        // Outer container with border and shadow
-                        Container(
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF4C77B9),
-                            borderRadius: BorderRadius.circular(14.r),
-                            border: Border.all(
-                              color:
-                                  const Color(0xFF285498), // Darker blue border
-                              width: 2.w,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.2),
-                                offset: const Offset(3, 3),
-                                blurRadius: 4,
-                                spreadRadius: 0,
+        child: Stack(
+          children: [
+            // Main game content
+            Padding(
+              padding: EdgeInsets.all(16.w),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFFA1C0F2),
+                  borderRadius: BorderRadius.circular(16.r),
+                  border: Border.all(
+                    color: CardColors.blue.shadow,
+                    width: 2.w,
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    // Main game content
+                    Expanded(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(
+                            horizontal: 16.w, vertical: 12.h),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            // Question text
+                            Container(
+                              width: double.infinity,
+                              padding: EdgeInsets.symmetric(
+                                  vertical: 16.h, horizontal: 16.w),
+                              decoration: BoxDecoration(
+                                color: AppColors.questionBackground,
+                                borderRadius: BorderRadius.circular(16.r),
                               ),
-                            ],
-                          ),
-                          padding: EdgeInsets.all(10.w),
-                          child: Column(
-                            children: [
-                              // Display number with darker blue background
-                              Container(
-                                width: double.infinity,
-                                padding: EdgeInsets.symmetric(vertical: 14.h),
-                                decoration: BoxDecoration(
+                              child: Text(
+                                currentQuestion.question,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: AppColors.instructionText,
+                                  fontSize: 16.sp,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+
+                            SizedBox(height: 12.h),
+                            // Outer container with border and shadow
+                            Container(
+                              width: double.infinity,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF4C77B9),
+                                borderRadius: BorderRadius.circular(14.r),
+                                border: Border.all(
                                   color: const Color(
-                                      0xFF285498), // Darker blue background
-                                  borderRadius: BorderRadius.circular(12.r),
+                                      0xFF285498), // Darker blue border
+                                  width: 2.w,
                                 ),
-                                child: Text(
-                                  '1654',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: AppColors.numberPink,
-                                    fontSize: 40.sp,
-                                    fontWeight: FontWeight.bold,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.2),
+                                    offset: const Offset(3, 3),
+                                    blurRadius: 4,
+                                    spreadRadius: 0,
                                   ),
-                                ),
+                                ],
                               ),
-
-                              SizedBox(height: 12.h),
-                              // Wrapping the specified section in a container with the requested properties
-                              Container(
-                                padding: EdgeInsets.only(
-                                    top: 5.h, bottom: 20.h, left: 0, right: 0),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF285498),
-                                  borderRadius: BorderRadius.circular(12.r),
-                                ),
-                                child: Column(
-                                  children: [
-                                    // Slider 1
+                              padding: EdgeInsets.all(10.w),
+                              child: Column(
+                                children: [
+                                  // Display number with darker blue background for GCF questions
+                                  if (currentQuestion.questionType ==
+                                          QuestionType.gcf &&
+                                      currentQuestion.operand1 != null)
                                     Container(
-                                      margin: EdgeInsets.symmetric(
-                                          vertical: 5.h, horizontal: 8.w),
-                                      padding: EdgeInsets.symmetric(
-                                          vertical: 1.h, horizontal: 6.w),
+                                      width: double.infinity,
+                                      padding:
+                                          EdgeInsets.symmetric(vertical: 14.h),
                                       decoration: BoxDecoration(
                                         color: const Color(
-                                            0xFF093881), // Darker blue background
-                                        borderRadius:
-                                            BorderRadius.circular(8.r),
-                                      ),
-                                      child: SizedBox(
-                                        height: 35.h,
-                                        child: Stack(
-                                          children: [
-                                            // Base line
-                                            Positioned(
-                                              left: 0,
-                                              right: 0,
-                                              top: 20.h,
-                                              child: Container(
-                                                height: 2.h,
-                                                color: Colors.white,
-                                              ),
-                                            ),
-
-                                            // 5 evenly distributed tick marks with labels above them
-                                            ...List.generate(5, (index) {
-                                              final position = index / 4;
-                                              final value = _minOverallValue +
-                                                  (_maxOverallValue -
-                                                          _minOverallValue) *
-                                                      position;
-
-                                              return Stack(
-                                                children: [
-                                                  // Tick mark
-                                                  Positioned(
-                                                    left: position *
-                                                        (contentWidth - 20.w),
-                                                    top: 16.h,
-                                                    child: Container(
-                                                      width: 2.w,
-                                                      height: 8.h,
-                                                      color: AppColors
-                                                          .numberYellow,
-                                                    ),
-                                                  ),
-
-                                                  // Number label directly above each tick mark
-                                                  Positioned(
-                                                    left: position *
-                                                            (contentWidth -
-                                                                20.w) -
-                                                        15.w,
-                                                    top: 5.h,
-                                                    child: Text(
-                                                      value.toInt().toString(),
-                                                      style: TextStyle(
-                                                        color: AppColors
-                                                            .numberYellow,
-                                                        fontSize: 10.sp,
-                                                        fontWeight:
-                                                            FontWeight.w500,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ],
-                                              );
-                                            }),
-
-                                            // Make the entire slider area draggable with dampened movement
-                                            Positioned.fill(
-                                              child: GestureDetector(
-                                                onPanUpdate: (details) {
-                                                  setState(() {
-                                                    // Apply a dampening factor to make movement "heavier"
-                                                    final dampFactor =
-                                                        0.3; // Lower = heavier feel
-
-                                                    // Current position in pixels
-                                                    final currentPosInPixels =
-                                                        _topSliderPosition *
-                                                            (contentWidth -
-                                                                20.w);
-
-                                                    // Apply dampened movement
-                                                    final newPosInPixels =
-                                                        currentPosInPixels +
-                                                            (details.delta.dx *
-                                                                dampFactor);
-
-                                                    // Convert back to 0-1 range and clamp
-                                                    _topSliderPosition =
-                                                        (newPosInPixels /
-                                                                (contentWidth -
-                                                                    20.w))
-                                                            .clamp(0.0, 1.0);
-
-                                                    // Update the detail view range based on new position
-                                                    _updateDetailViewRange();
-                                                  });
-                                                },
-                                              ),
-                                            ),
-
-                                            // Zoom window indicator with heavier drag response
-                                            Positioned(
-                                              left: _topSliderPosition *
-                                                      (contentWidth - 20.w) -
-                                                  45.w,
-                                              top: 2.h,
-                                              child: GestureDetector(
-                                                onTapDown: (_) {
-                                                  setState(() {
-                                                    _isTopSliderActive = true;
-                                                    _topSliderController
-                                                        .forward();
-                                                  });
-                                                },
-                                                onTapUp: (_) {
-                                                  setState(() {
-                                                    _isTopSliderActive = false;
-                                                    _topSliderController
-                                                        .reverse();
-                                                  });
-                                                },
-                                                onPanStart: (_) {
-                                                  setState(() {
-                                                    _isTopSliderActive = true;
-                                                    _topSliderController
-                                                        .forward();
-                                                  });
-                                                },
-                                                onPanUpdate: (details) {
-                                                  setState(() {
-                                                    // Apply dampening factor for heavier feel
-                                                    final dampFactor = 0.3;
-
-                                                    // Current position in pixels
-                                                    final currentPosInPixels =
-                                                        _topSliderPosition *
-                                                            (contentWidth -
-                                                                20.w);
-
-                                                    // Apply dampened movement
-                                                    final newPosInPixels =
-                                                        currentPosInPixels +
-                                                            (details.delta.dx *
-                                                                dampFactor);
-
-                                                    // Convert back to 0-1 range and clamp
-                                                    _topSliderPosition =
-                                                        (newPosInPixels /
-                                                                (contentWidth -
-                                                                    20.w))
-                                                            .clamp(0.0, 1.0);
-
-                                                    // Update the detail view range based on new position
-                                                    _updateDetailViewRange();
-                                                  });
-                                                },
-                                                onPanEnd: (_) {
-                                                  setState(() {
-                                                    _isTopSliderActive = false;
-                                                    _topSliderController
-                                                        .reverse();
-                                                  });
-                                                },
-                                                child: AnimatedBuilder(
-                                                  animation:
-                                                      _topSliderAnimation,
-                                                  builder: (context, child) {
-                                                    return Transform.scale(
-                                                      scale: _topSliderAnimation
-                                                          .value,
-                                                      child: Container(
-                                                        width: 90.w,
-                                                        height: 31.h,
-                                                        decoration:
-                                                            BoxDecoration(
-                                                          border: Border.all(
-                                                            color:
-                                                                Colors.orange,
-                                                            width: 3.w,
-                                                          ),
-                                                          color: Colors.blue
-                                                              .withOpacity(0.3),
-                                                          borderRadius:
-                                                              BorderRadius
-                                                                  .circular(
-                                                                      10.r),
-                                                        ),
-                                                      ),
-                                                    );
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                    SizedBox(height: 10.h),
-
-                                    // Main number line area (detailed view)
-                                    Container(
-                                      decoration: BoxDecoration(
-                                        color: const Color(
-                                            0xFF0B429A), // Darker blue background
+                                            0xFF285498), // Darker blue background
                                         borderRadius:
                                             BorderRadius.circular(12.r),
                                       ),
-                                      padding: EdgeInsets.symmetric(
-                                          vertical: 16.h, horizontal: 12.w),
-                                      child: Column(
-                                        children: [
-                                          // Labels at the top left and right (moved to be aligned with down triangle)
-                                          SizedBox(
-                                            height: 40.h,
-                                            child: Stack(
-                                              children: [
-                                                // Left label
-                                                Positioned(
-                                                  left: 0,
-                                                  top: 8
-                                                      .h, // Aligned with the triangle
-                                                  child: Text(
-                                                    _minValue
-                                                        .toInt()
-                                                        .toString(),
-                                                    style: TextStyle(
-                                                      color: AppColors
-                                                          .numberYellow,
-                                                      fontSize: 16.sp,
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                    ),
-                                                  ),
-                                                ),
-                                                // Right label
-                                                Positioned(
-                                                  right: 0,
-                                                  top: 8
-                                                      .h, // Aligned with the triangle
-                                                  child: Text(
-                                                    _maxValue
-                                                        .toInt()
-                                                        .toString(),
-                                                    style: TextStyle(
-                                                      color: AppColors
-                                                          .numberYellow,
-                                                      fontSize: 16.sp,
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                    ),
-                                                  ),
-                                                ),
-                                                // Down triangle (no circle, just triangle)
-                                                Positioned(
-                                                  left: _downSliderPosition *
-                                                          (contentWidth -
-                                                              100.w) -
-                                                      15.w,
-                                                  bottom: 0,
-                                                  child: GestureDetector(
-                                                    onPanStart: (_) {
-                                                      setState(() {
-                                                        _isDownSliderActive =
-                                                            true;
-                                                        _downSliderController
-                                                            .forward();
-                                                        _selectedValue =
-                                                            _getValueFromPosition(
-                                                                _downSliderPosition);
-                                                      });
-                                                    },
-                                                    onPanUpdate: (details) {
-                                                      setState(() {
-                                                        _downSliderPosition = (_downSliderPosition *
-                                                                        (contentWidth -
-                                                                            100
-                                                                                .w) +
-                                                                    details
-                                                                        .delta
-                                                                        .dx)
-                                                                .clamp(
-                                                                    0.0,
-                                                                    contentWidth -
-                                                                        100.w) /
-                                                            (contentWidth -
-                                                                100.w);
-                                                        _selectedValue =
-                                                            _getValueFromPosition(
-                                                                _downSliderPosition);
-                                                      });
-                                                    },
-                                                    onPanEnd: (_) {
-                                                      setState(() {
-                                                        _isDownSliderActive =
-                                                            false;
-                                                        _downSliderController
-                                                            .reverse();
-                                                      });
-                                                    },
-                                                    child: AnimatedBuilder(
-                                                        animation:
-                                                            _downSliderAnimation,
-                                                        builder:
-                                                            (context, child) {
-                                                          return Transform
-                                                              .scale(
-                                                            scale:
-                                                                _downSliderAnimation
-                                                                    .value,
-                                                            child: ClipPath(
-                                                              clipper:
-                                                                  TriangleClipper(
-                                                                      isDown:
-                                                                          true),
-                                                              child: Container(
-                                                                width: 30.w,
-                                                                height: 30.h,
-                                                                color: AppColors
-                                                                    .trianglePointer,
-                                                              ),
-                                                            ),
-                                                          );
-                                                        }),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
+                                      child: Text(
+                                        currentQuestion.operand1.toString(),
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          color: AppColors.numberPink,
+                                          fontSize: 40.sp,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+
+                                  SizedBox(height: 12.h),
+                                  // Wrapping the specified section in a container with the requested properties
+                                  Container(
+                                    padding: EdgeInsets.only(
+                                        top: 5.h,
+                                        bottom: 20.h,
+                                        left: 0,
+                                        right: 0),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF285498),
+                                      borderRadius: BorderRadius.circular(12.r),
+                                    ),
+                                    child: Column(
+                                      children: [
+                                        // Slider 1 - Top slider with orange rectangle
+                                        Container(
+                                          margin: EdgeInsets.symmetric(
+                                              vertical: 5.h, horizontal: 8.w),
+                                          padding: EdgeInsets.symmetric(
+                                              vertical: 1.h, horizontal: 6.w),
+                                          decoration: BoxDecoration(
+                                            color: const Color(
+                                                0xFF093881), // Darker blue background
+                                            borderRadius:
+                                                BorderRadius.circular(8.r),
                                           ),
-
-                                          SizedBox(height: 2.h),
-
-                                          // Center line with tick marks - INCREASED HEIGHT
-                                          SizedBox(
-                                            height: 30.h,
+                                          child: SizedBox(
+                                            height: 35.h,
                                             child: Stack(
                                               children: [
-                                                // Horizontal line
+                                                // Base line
                                                 Positioned(
                                                   left: 0,
                                                   right: 0,
-                                                  top: 14.h,
+                                                  top: 20.h,
                                                   child: Container(
                                                     height: 2.h,
                                                     color: Colors.white,
                                                   ),
                                                 ),
 
-                                                // Tick marks
-                                                ...List.generate(11, (index) {
-                                                  return Positioned(
-                                                    left: index *
-                                                        (contentWidth - 100.w) /
-                                                        10,
-                                                    top: 9.h,
-                                                    child: Container(
-                                                      height: 12.h,
-                                                      width: 2.w,
-                                                      color: _isCheckingAnswer &&
-                                                              index ==
-                                                                  (_downSliderPosition *
-                                                                          10)
-                                                                      .round()
-                                                          ? (_isCorrect
-                                                              ? AppColors
-                                                                  .correctFeedback
-                                                              : AppColors
-                                                                  .incorrectFeedback)
-                                                          : AppColors
+                                                // 5 evenly distributed tick marks with labels above them
+                                                ...List.generate(5, (index) {
+                                                  final position = index / 4;
+                                                  // Use the overall range from level for top slider
+                                                  final value = _level
+                                                          .minValue +
+                                                      ((_level.maxValue -
+                                                              _level.minValue) *
+                                                          position);
+
+                                                  return Stack(
+                                                    children: [
+                                                      // Tick mark
+                                                      Positioned(
+                                                        left: position *
+                                                            (contentWidth -
+                                                                20.w),
+                                                        top: 16.h,
+                                                        child: Container(
+                                                          width: 2.w,
+                                                          height: 8.h,
+                                                          color: AppColors
                                                               .numberYellow,
-                                                    ),
+                                                        ),
+                                                      ),
+
+                                                      // Number label directly above each tick mark
+                                                      Positioned(
+                                                        left: position *
+                                                                (contentWidth -
+                                                                    20.w) -
+                                                            15.w,
+                                                        top: 5.h,
+                                                        child: Text(
+                                                          value
+                                                              .toInt()
+                                                              .toString(),
+                                                          style: TextStyle(
+                                                            color: AppColors
+                                                                .numberYellow,
+                                                            fontSize: 10.sp,
+                                                            fontWeight:
+                                                                FontWeight.w500,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
                                                   );
                                                 }),
-                                              ],
-                                            ),
-                                          ),
 
-                                          SizedBox(height: 8.h),
+                                                // Make the entire slider area draggable with dampened movement
+                                                Positioned.fill(
+                                                  child: GestureDetector(
+                                                    onPanUpdate: (details) {
+                                                      setState(() {
+                                                        // Apply a dampening factor to make movement "heavier"
+                                                        final dampFactor =
+                                                            0.3; // Lower = heavier feel
 
-                                          // Up triangle (no circle, just triangle) with shadow
-                                          SizedBox(
-                                            height: 40.h,
-                                            child: Stack(
-                                              clipBehavior: Clip.none,
-                                              children: [
-                                                // Shadow for the up triangle
-                                                Positioned(
-                                                  left: (_upSliderPosition *
-                                                          (contentWidth -
-                                                              100.w)) -
-                                                      3.w -
-                                                      15.w,
-                                                  top: 3.h,
-                                                  child: ClipPath(
-                                                    clipper: TriangleClipper(
-                                                        isDown: false),
-                                                    child: Container(
-                                                      width: 30.w,
-                                                      height: 30.h,
-                                                      color: Colors.black
-                                                          .withOpacity(0.3),
-                                                    ),
+                                                        // Current position in pixels
+                                                        final currentPosInPixels =
+                                                            _topSliderPosition *
+                                                                (contentWidth -
+                                                                    20.w);
+
+                                                        // Apply dampened movement
+                                                        final newPosInPixels =
+                                                            currentPosInPixels +
+                                                                (details.delta
+                                                                        .dx *
+                                                                    dampFactor);
+
+                                                        // Convert back to 0-1 range and clamp
+                                                        _topSliderPosition =
+                                                            (newPosInPixels /
+                                                                    (contentWidth -
+                                                                        20.w))
+                                                                .clamp(
+                                                                    0.0, 1.0);
+
+                                                        // Update the detail view range based on new position
+                                                        _updateDetailViewRange();
+                                                      });
+                                                    },
                                                   ),
                                                 ),
-                                                // Up triangle
+
+                                                // Zoom window indicator with heavier drag response
                                                 Positioned(
-                                                  left: _upSliderPosition *
+                                                  left: _topSliderPosition *
                                                           (contentWidth -
-                                                              100.w) -
-                                                      15.w,
-                                                  top: 0,
+                                                              20.w) -
+                                                      45.w,
+                                                  top: 2.h,
                                                   child: GestureDetector(
+                                                    onTapDown: (_) {
+                                                      setState(() {
+                                                        _isTopSliderActive =
+                                                            true;
+                                                        _topSliderController
+                                                            .forward();
+                                                      });
+                                                    },
+                                                    onTapUp: (_) {
+                                                      setState(() {
+                                                        _isTopSliderActive =
+                                                            false;
+                                                        _topSliderController
+                                                            .reverse();
+                                                      });
+                                                    },
                                                     onPanStart: (_) {
                                                       setState(() {
-                                                        _isUpSliderActive =
+                                                        _isTopSliderActive =
                                                             true;
-                                                        _upSliderController
+                                                        _topSliderController
                                                             .forward();
-                                                        _selectedValue =
-                                                            _getValueFromPosition(
-                                                                _upSliderPosition);
                                                       });
                                                     },
                                                     onPanUpdate: (details) {
                                                       setState(() {
-                                                        _upSliderPosition = (_upSliderPosition *
-                                                                        (contentWidth -
-                                                                            100
-                                                                                .w) +
-                                                                    details
-                                                                        .delta
-                                                                        .dx)
+                                                        // Apply dampening factor for heavier feel
+                                                        final dampFactor = 0.3;
+
+                                                        // Current position in pixels
+                                                        final currentPosInPixels =
+                                                            _topSliderPosition *
+                                                                (contentWidth -
+                                                                    20.w);
+
+                                                        // Apply dampened movement
+                                                        final newPosInPixels =
+                                                            currentPosInPixels +
+                                                                (details.delta
+                                                                        .dx *
+                                                                    dampFactor);
+
+                                                        // Convert back to 0-1 range and clamp
+                                                        _topSliderPosition =
+                                                            (newPosInPixels /
+                                                                    (contentWidth -
+                                                                        20.w))
                                                                 .clamp(
-                                                                    0.0,
-                                                                    contentWidth -
-                                                                        100.w) /
-                                                            (contentWidth -
-                                                                100.w);
-                                                        _selectedValue =
-                                                            _getValueFromPosition(
-                                                                _upSliderPosition);
+                                                                    0.0, 1.0);
+
+                                                        // Update the detail view range based on new position
+                                                        _updateDetailViewRange();
                                                       });
                                                     },
                                                     onPanEnd: (_) {
                                                       setState(() {
-                                                        _isUpSliderActive =
+                                                        _isTopSliderActive =
                                                             false;
-                                                        _upSliderController
+                                                        _topSliderController
                                                             .reverse();
-                                                        _snapUpSliderToNearestTick();
                                                       });
                                                     },
                                                     child: AnimatedBuilder(
-                                                        animation:
-                                                            _upSliderAnimation,
-                                                        builder:
-                                                            (context, child) {
-                                                          return Transform
-                                                              .scale(
-                                                            scale:
-                                                                _upSliderAnimation
-                                                                    .value,
-                                                            child: ClipPath(
-                                                              clipper:
-                                                                  TriangleClipper(
-                                                                      isDown:
-                                                                          false),
-                                                              child: Container(
-                                                                width: 30.w,
-                                                                height: 30.h,
-                                                                color: _isCheckingAnswer
-                                                                    ? (_isCorrect
-                                                                        ? AppColors
-                                                                            .correctFeedback
-                                                                        : AppColors
-                                                                            .incorrectFeedback)
-                                                                    : AppColors
-                                                                        .trianglePointer,
+                                                      animation:
+                                                          _topSliderAnimation,
+                                                      builder:
+                                                          (context, child) {
+                                                        return Transform.scale(
+                                                          scale:
+                                                              _topSliderAnimation
+                                                                  .value,
+                                                          child: Container(
+                                                            width: 90.w,
+                                                            height: 31.h,
+                                                            decoration:
+                                                                BoxDecoration(
+                                                              border:
+                                                                  Border.all(
+                                                                color: Colors
+                                                                    .orange,
+                                                                width: 3.w,
                                                               ),
+                                                              color: Colors.blue
+                                                                  .withOpacity(
+                                                                      0.3),
+                                                              borderRadius:
+                                                                  BorderRadius
+                                                                      .circular(
+                                                                          10.r),
                                                             ),
-                                                          );
-                                                        }),
+                                                          ),
+                                                        );
+                                                      },
+                                                    ),
                                                   ),
                                                 ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                        SizedBox(height: 10.h),
 
-                                                // Display selected value when dragging
-                                                if (_isDownSliderActive ||
-                                                    _isUpSliderActive)
-                                                  Positioned(
-                                                    left: (_isDownSliderActive
-                                                                ? _downSliderPosition
-                                                                : _upSliderPosition) *
-                                                            (contentWidth -
-                                                                100.w) -
-                                                        20.w,
-                                                    top: (_isDownSliderActive
-                                                        ? -30.h
-                                                        : 35.h),
-                                                    child: Container(
-                                                      padding:
-                                                          EdgeInsets.symmetric(
-                                                        horizontal: 8.w,
-                                                        vertical: 4.h,
-                                                      ),
-                                                      decoration: BoxDecoration(
-                                                        color: AppColors
-                                                            .numberPink,
-                                                        borderRadius:
-                                                            BorderRadius
-                                                                .circular(8.r),
-                                                      ),
+                                        // Main number line area (detailed view)
+                                        Container(
+                                          decoration: BoxDecoration(
+                                            color: const Color(
+                                                0xFF0B429A), // Darker blue background
+                                            borderRadius:
+                                                BorderRadius.circular(12.r),
+                                          ),
+                                          padding: EdgeInsets.symmetric(
+                                              vertical: 16.h, horizontal: 12.w),
+                                          child: Column(
+                                            children: [
+                                              // Labels at the top left and right (moved to be aligned with down triangle)
+                                              SizedBox(
+                                                height: 40.h,
+                                                child: Stack(
+                                                  children: [
+                                                    // Left label - Now using value from top slider range
+                                                    Positioned(
+                                                      left: 0,
+                                                      top: 8
+                                                          .h, // Aligned with the triangle
                                                       child: Text(
-                                                        _selectedValue
-                                                                ?.toString() ??
-                                                            '',
+                                                        _minValue
+                                                            .toInt()
+                                                            .toString(),
                                                         style: TextStyle(
-                                                          color: Colors.white,
-                                                          fontSize: 14.sp,
+                                                          color: AppColors
+                                                              .numberYellow,
+                                                          fontSize: 16.sp,
                                                           fontWeight:
                                                               FontWeight.bold,
                                                         ),
                                                       ),
                                                     ),
-                                                  ),
-                                              ],
-                                            ),
+                                                    // Right label - Now using value from top slider range
+                                                    Positioned(
+                                                      right: 0,
+                                                      top: 8
+                                                          .h, // Aligned with the triangle
+                                                      child: Text(
+                                                        _maxValue
+                                                            .toInt()
+                                                            .toString(),
+                                                        style: TextStyle(
+                                                          color: AppColors
+                                                              .numberYellow,
+                                                          fontSize: 16.sp,
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    // Down triangle (no circle, just triangle)
+                                                    Positioned(
+                                                      left: _downSliderPosition *
+                                                              (contentWidth -
+                                                                  100.w) -
+                                                          15.w,
+                                                      bottom: 0,
+                                                      child: GestureDetector(
+                                                        onPanStart: (_) {
+                                                          setState(() {
+                                                            _isDownSliderActive =
+                                                                true;
+                                                            _downSliderController
+                                                                .forward();
+                                                            _selectedValue =
+                                                                _getValueFromPosition(
+                                                                    _downSliderPosition);
+                                                          });
+                                                        },
+                                                        onPanUpdate: (details) {
+                                                          setState(() {
+                                                            _downSliderPosition = (_downSliderPosition *
+                                                                            (contentWidth -
+                                                                                100
+                                                                                    .w) +
+                                                                        details
+                                                                            .delta
+                                                                            .dx)
+                                                                    .clamp(
+                                                                        0.0,
+                                                                        contentWidth -
+                                                                            100
+                                                                                .w) /
+                                                                (contentWidth -
+                                                                    100.w);
+                                                            _selectedValue =
+                                                                _getValueFromPosition(
+                                                                    _downSliderPosition);
+                                                          });
+                                                        },
+                                                        onPanEnd: (_) {
+                                                          setState(() {
+                                                            _isDownSliderActive =
+                                                                false;
+                                                            _downSliderController
+                                                                .reverse();
+                                                            _snapDownSliderToNearestTick();
+                                                          });
+                                                        },
+                                                        child: AnimatedBuilder(
+                                                            animation:
+                                                                _downSliderAnimation,
+                                                            builder: (context,
+                                                                child) {
+                                                              return Transform
+                                                                  .scale(
+                                                                scale:
+                                                                    _downSliderAnimation
+                                                                        .value,
+                                                                child: ClipPath(
+                                                                  clipper: TriangleClipper(
+                                                                      isDown:
+                                                                          true),
+                                                                  child:
+                                                                      Container(
+                                                                    width: 30.w,
+                                                                    height:
+                                                                        30.h,
+                                                                    color: _isCheckingAnswer
+                                                                        ? (_isCorrect
+                                                                            ? AppColors
+                                                                                .correctFeedback
+                                                                            : AppColors
+                                                                                .incorrectFeedback)
+                                                                        : AppColors
+                                                                            .trianglePointer,
+                                                                  ),
+                                                                ),
+                                                              );
+                                                            }),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+
+                                              SizedBox(height: 2.h),
+
+                                              // Center line with tick marks - INCREASED HEIGHT
+                                              SizedBox(
+                                                height: 30.h,
+                                                child: Stack(
+                                                  children: [
+                                                    // Horizontal line
+                                                    Positioned(
+                                                      left: 0,
+                                                      right: 0,
+                                                      top: 14.h,
+                                                      child: Container(
+                                                        height: 2.h,
+                                                        color: _isCheckingAnswer
+                                                            ? (_isCorrect
+                                                                ? AppColors
+                                                                    .correctFeedback
+                                                                    .withOpacity(
+                                                                        0.7)
+                                                                : AppColors
+                                                                    .incorrectFeedback
+                                                                    .withOpacity(
+                                                                        0.7))
+                                                            : Colors.white,
+                                                      ),
+                                                    ),
+
+                                                    // Tick marks
+                                                    ...List.generate(11,
+                                                        (index) {
+                                                      final position =
+                                                          index / 10.0;
+                                                      final value = _minValue +
+                                                          ((_maxValue -
+                                                                  _minValue) *
+                                                              position);
+
+                                                      // Determine if this tick is selected by either slider
+                                                      final isDownTick =
+                                                          (_findNearestTickPosition(
+                                                                          _downSliderPosition) *
+                                                                      10)
+                                                                  .round() ==
+                                                              index;
+                                                      final isUpTick =
+                                                          (_findNearestTickPosition(
+                                                                          _upSliderPosition) *
+                                                                      10)
+                                                                  .round() ==
+                                                              index;
+                                                      final isSelected =
+                                                          isDownTick ||
+                                                              isUpTick;
+
+                                                      return Positioned(
+                                                        left: index *
+                                                            (contentWidth -
+                                                                100.w) /
+                                                            10,
+                                                        top: 9.h,
+                                                        child: Container(
+                                                          height: 12.h,
+                                                          width: 2.w,
+                                                          color: _isCheckingAnswer &&
+                                                                  isSelected
+                                                              ? (_isCorrect
+                                                                  ? AppColors
+                                                                      .correctFeedback
+                                                                  : AppColors
+                                                                      .incorrectFeedback)
+                                                              : AppColors
+                                                                  .numberYellow,
+                                                        ),
+                                                      );
+                                                    }),
+
+                                                    // Optional tick labels for numbers
+                                                    ...List.generate(11,
+                                                        (index) {
+                                                      if (index % 2 == 0) {
+                                                        // Show every other number to avoid crowding
+                                                        final position =
+                                                            index / 10.0;
+                                                        final value = _minValue +
+                                                            ((_maxValue -
+                                                                    _minValue) *
+                                                                position);
+
+                                                        return Positioned(
+                                                          left: (index *
+                                                                  (contentWidth -
+                                                                      100.w) /
+                                                                  10) -
+                                                              10.w,
+                                                          top: 24.h,
+                                                          child: Text(
+                                                            value
+                                                                .toInt()
+                                                                .toString(),
+                                                            style: TextStyle(
+                                                              color: AppColors
+                                                                  .numberYellow,
+                                                              fontSize: 10.sp,
+                                                            ),
+                                                          ),
+                                                        );
+                                                      } else {
+                                                        return const SizedBox
+                                                            .shrink();
+                                                      }
+                                                    }),
+                                                  ],
+                                                ),
+                                              ),
+
+                                              SizedBox(height: 8.h),
+
+                                              // Up triangle (no circle, just triangle) with shadow
+                                              SizedBox(
+                                                height: 40.h,
+                                                child: Stack(
+                                                  clipBehavior: Clip.none,
+                                                  children: [
+                                                    // Shadow for the up triangle
+                                                    Positioned(
+                                                      left: (_upSliderPosition *
+                                                              (contentWidth -
+                                                                  100.w)) -
+                                                          3.w -
+                                                          15.w,
+                                                      top: 3.h,
+                                                      child: ClipPath(
+                                                        clipper:
+                                                            TriangleClipper(
+                                                                isDown: false),
+                                                        child: Container(
+                                                          width: 30.w,
+                                                          height: 30.h,
+                                                          color: Colors.black
+                                                              .withOpacity(0.3),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    // Up triangle
+                                                    Positioned(
+                                                      left: _upSliderPosition *
+                                                              (contentWidth -
+                                                                  100.w) -
+                                                          15.w,
+                                                      top: 0,
+                                                      child: GestureDetector(
+                                                        onPanStart: (_) {
+                                                          setState(() {
+                                                            _isUpSliderActive =
+                                                                true;
+                                                            _upSliderController
+                                                                .forward();
+                                                            _selectedValue =
+                                                                _getValueFromPosition(
+                                                                    _upSliderPosition);
+                                                          });
+                                                        },
+                                                        onPanUpdate: (details) {
+                                                          setState(() {
+                                                            _upSliderPosition = (_upSliderPosition *
+                                                                            (contentWidth -
+                                                                                100
+                                                                                    .w) +
+                                                                        details
+                                                                            .delta
+                                                                            .dx)
+                                                                    .clamp(
+                                                                        0.0,
+                                                                        contentWidth -
+                                                                            100
+                                                                                .w) /
+                                                                (contentWidth -
+                                                                    100.w);
+                                                            _selectedValue =
+                                                                _getValueFromPosition(
+                                                                    _upSliderPosition);
+                                                          });
+                                                        },
+                                                        onPanEnd: (_) {
+                                                          setState(() {
+                                                            _isUpSliderActive =
+                                                                false;
+                                                            _upSliderController
+                                                                .reverse();
+                                                            _snapUpSliderToNearestTick();
+                                                          });
+                                                        },
+                                                        child: AnimatedBuilder(
+                                                            animation:
+                                                                _upSliderAnimation,
+                                                            builder: (context,
+                                                                child) {
+                                                              return Transform
+                                                                  .scale(
+                                                                scale:
+                                                                    _upSliderAnimation
+                                                                        .value,
+                                                                child: ClipPath(
+                                                                  clipper: TriangleClipper(
+                                                                      isDown:
+                                                                          false),
+                                                                  child:
+                                                                      Container(
+                                                                    width: 30.w,
+                                                                    height:
+                                                                        30.h,
+                                                                    color: _isCheckingAnswer
+                                                                        ? (_isCorrect
+                                                                            ? AppColors
+                                                                                .correctFeedback
+                                                                            : AppColors
+                                                                                .incorrectFeedback)
+                                                                        : AppColors
+                                                                            .trianglePointer,
+                                                                  ),
+                                                                ),
+                                                              );
+                                                            }),
+                                                      ),
+                                                    ),
+
+                                                    // Display selected value when dragging
+                                                    if (_isDownSliderActive ||
+                                                        _isUpSliderActive)
+                                                      Positioned(
+                                                        left: (_isDownSliderActive
+                                                                    ? _downSliderPosition
+                                                                    : _upSliderPosition) *
+                                                                (contentWidth -
+                                                                    100.w) -
+                                                            20.w,
+                                                        top:
+                                                            (_isDownSliderActive
+                                                                ? -30.h
+                                                                : 35.h),
+                                                        child: Container(
+                                                          padding: EdgeInsets
+                                                              .symmetric(
+                                                            horizontal: 8.w,
+                                                            vertical: 4.h,
+                                                          ),
+                                                          decoration:
+                                                              BoxDecoration(
+                                                            color: AppColors
+                                                                .numberPink,
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        8.r),
+                                                          ),
+                                                          child: Text(
+                                                            _selectedValue
+                                                                    ?.toString() ??
+                                                                '',
+                                                            style: TextStyle(
+                                                              color:
+                                                                  Colors.white,
+                                                              fontSize: 14.sp,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .bold,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        SizedBox(height: 14.h),
+                                      ],
+                                    ),
+                                  ), // Check answer button at the center bottom
+                                  SizedBox(height: 30.h),
+                                  Center(
+                                    child: Container(
+                                      width: 200.w,
+                                      height: 56.h,
+                                      decoration: BoxDecoration(
+                                        color: _isCheckingAnswer
+                                            ? (_isCorrect
+                                                ? AppColors.correctFeedback
+                                                : AppColors.incorrectFeedback)
+                                            : const Color(0xFF83E6B8),
+                                        borderRadius:
+                                            BorderRadius.circular(28.r),
+                                        border: Border.all(
+                                          color: _isCheckingAnswer
+                                              ? (_isCorrect
+                                                  ? const Color(0xFF66CC66)
+                                                  : const Color(0xFFCC3333))
+                                              : const Color(0xFF59B94D),
+                                          width: 2.w,
+                                        ),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color:
+                                                Colors.black.withOpacity(0.1),
+                                            blurRadius: 4,
+                                            offset: const Offset(0, 2),
                                           ),
                                         ],
                                       ),
-                                    ),
-                                    SizedBox(height: 14.h),
-                                  ],
-                                ),
-                              ), // Check answer button at the center bottom
-                              SizedBox(height: 30.h),
-                              Center(
-                                child: Container(
-                                  width: 200.w,
-                                  height: 56.h,
-                                  decoration: BoxDecoration(
-                                    color: _isCheckingAnswer
-                                        ? (_isCorrect
-                                            ? AppColors.correctFeedback
-                                            : AppColors.incorrectFeedback)
-                                        : const Color(0xFF83E6B8),
-                                    borderRadius: BorderRadius.circular(28.r),
-                                    border: Border.all(
-                                      color: _isCheckingAnswer
-                                          ? (_isCorrect
-                                              ? const Color(0xFF66CC66)
-                                              : const Color(0xFFCC3333))
-                                          : const Color(0xFF59B94D),
-                                      width: 2.w,
-                                    ),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withOpacity(0.1),
-                                        blurRadius: 4,
-                                        offset: const Offset(0, 2),
-                                      ),
-                                    ],
-                                  ),
-                                  child: TextButton(
-                                    onPressed: !_isCheckingAnswer
-                                        ? _checkAnswer
-                                        : null,
-                                    style: TextButton.styleFrom(
-                                      foregroundColor: Colors.white,
-                                      padding: EdgeInsets.zero,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius:
-                                            BorderRadius.circular(28.r),
-                                      ),
-                                    ),
-                                    child: Text(
-                                      _isCheckingAnswer
-                                          ? (_isCorrect
-                                              ? 'Correct!'
-                                              : 'Try Again')
-                                          : 'Check Answer',
-                                      style: TextStyle(
-                                        fontSize: 16.sp,
-                                        fontWeight: FontWeight.bold,
-                                        color: _isCheckingAnswer
-                                            ? Colors.white
-                                            : const Color(0xFF59B94D),
+                                      child: TextButton(
+                                        onPressed: !_isCheckingAnswer
+                                            ? (_isTutorialMode
+                                                ? _advanceTutorial
+                                                : _checkAnswer)
+                                            : null,
+                                        style: TextButton.styleFrom(
+                                          foregroundColor: Colors.white,
+                                          padding: EdgeInsets.zero,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(28.r),
+                                          ),
+                                        ),
+                                        child: Text(
+                                          _isTutorialMode
+                                              ? 'Next'
+                                              : (_isCheckingAnswer
+                                                  ? (_isCorrect
+                                                      ? 'Correct!'
+                                                      : 'Try Again')
+                                                  : 'Check Answer'),
+                                          style: TextStyle(
+                                            fontSize: 16.sp,
+                                            fontWeight: FontWeight.bold,
+                                            color: _isCheckingAnswer
+                                                ? Colors.white
+                                                : const Color(0xFF59B94D),
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ),
+                                ],
                               ),
-                            ],
-                          ),
-                        ),
+                            ),
 
-                        // Feedback area (shows when checking answer)
-                        if (_isCheckingAnswer)
-                          Container(
-                            margin: EdgeInsets.only(top: 6.h),
-                            padding: EdgeInsets.symmetric(vertical: 12.h),
-                            width: double.infinity,
-                            decoration: BoxDecoration(
-                              color: _isCorrect
-                                  ? AppColors.correctFeedback
-                                  : AppColors.incorrectFeedback,
-                              borderRadius: BorderRadius.circular(12.r),
-                            ),
-                            child: Text(
-                              _isCorrect ? 'Correct!' : 'Not quite right',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 14.sp,
-                                fontWeight: FontWeight.bold,
+                            // Feedback area (shows when checking answer)
+                            if (_isCheckingAnswer)
+                              Container(
+                                margin: EdgeInsets.only(top: 6.h),
+                                padding: EdgeInsets.symmetric(vertical: 12.h),
+                                width: double.infinity,
+                                decoration: BoxDecoration(
+                                  color: _isCorrect
+                                      ? AppColors.correctFeedback
+                                      : AppColors.incorrectFeedback,
+                                  borderRadius: BorderRadius.circular(12.r),
+                                ),
+                                child: Text(
+                                  _isCorrect ? 'Correct!' : 'Not quite right',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14.sp,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ),
-                      ],
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
+
+            // Tutorial overlay if in tutorial mode
+            if (_isTutorialMode) _buildTutorialOverlay(),
+          ],
         ),
       ),
     );
@@ -1148,4 +1666,38 @@ class TriangleClipper extends CustomClipper<Path> {
 
   @override
   bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
+}
+
+// Custom painter for arrow in tutorial
+class ArrowPainter extends CustomPainter {
+  final bool isDown;
+
+  ArrowPainter({required this.isDown});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill;
+
+    final path = Path();
+
+    if (isDown) {
+      // Arrow pointing down
+      path.moveTo(size.width / 2, size.height);
+      path.lineTo(0, 0);
+      path.lineTo(size.width, 0);
+    } else {
+      // Arrow pointing up
+      path.moveTo(size.width / 2, 0);
+      path.lineTo(0, size.height);
+      path.lineTo(size.width, size.height);
+    }
+
+    path.close();
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
