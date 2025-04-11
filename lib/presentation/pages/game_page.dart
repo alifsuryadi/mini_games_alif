@@ -1,4 +1,4 @@
-// Modified game_page.dart with dynamic number range based on slider position
+// Modified game_page.dart with smooth ruler animation
 
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -45,6 +45,13 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
   late Animation<double> _downSliderSnapAnimation;
   late Animation<double> _upSliderSnapAnimation;
 
+  // Animation controller for ruler movement
+  late AnimationController _rulerAnimationController;
+  late Animation<double> _rulerAnimation;
+  double _previousTopSliderPosition = 0.5;
+  double _targetCenterValue = 0;
+  double _startCenterValue = 0;
+
   // State for active sliders
   bool _isTopSliderActive = false;
   bool _isDownSliderActive = false;
@@ -53,6 +60,8 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
   // Number line values - we'll make these dynamic based on slider position
   double _minValue = 0.0;
   double _maxValue = 0.0;
+  double _visibleMinValue = 0.0; // For smooth animation
+  double _visibleMaxValue = 0.0; // For smooth animation
 
   // Zoom range (the overall range for the zoomed-out view)
   double _minOverallValue = 1600.0;
@@ -97,6 +106,12 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
       duration: const Duration(milliseconds: 300),
     );
 
+    // Initialize ruler animation controller
+    _rulerAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+
     // Define hover animations
     _topSliderAnimation = Tween<double>(begin: 1.0, end: 1.2).animate(
         CurvedAnimation(parent: _topSliderController, curve: Curves.easeOut));
@@ -116,14 +131,18 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
     // Add snap animation listeners
     _downSliderSnapController.addListener(_updateDownSliderSnap);
     _upSliderSnapController.addListener(_updateUpSliderSnap);
+    _rulerAnimationController.addListener(_updateRulerAnimation);
 
     // Set initial position to match the main number line values
     _topSliderPosition = 0.5; // Start in the middle
+    _previousTopSliderPosition = 0.5;
     _downSliderTargetPosition = 0.5;
     _upSliderTargetPosition = 0.5;
 
     // Calculate the initial min and max values for the detail view
     _updateDetailViewRange();
+    _visibleMinValue = _minValue;
+    _visibleMaxValue = _maxValue;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeGame();
@@ -149,6 +168,61 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
       _maxValue = _maxOverallValue;
       _minValue = _maxOverallValue - _zoomWindowSize;
     }
+  }
+
+  // Update the ruler animation
+  void _updateRulerAnimation() {
+    if (!_rulerAnimationController.isAnimating) return;
+
+    setState(() {
+      // Calculate the animated center value
+      double currentCenterValue = _startCenterValue +
+          (_targetCenterValue - _startCenterValue) * _rulerAnimation.value;
+
+      // Update visible min and max values based on animated center
+      _visibleMinValue = currentCenterValue - _zoomWindowSize / 2;
+      _visibleMaxValue = currentCenterValue + _zoomWindowSize / 2;
+
+      // Ensure min and max stay within overall range
+      if (_visibleMinValue < _minOverallValue) {
+        _visibleMinValue = _minOverallValue;
+        _visibleMaxValue = _minOverallValue + _zoomWindowSize;
+      }
+      if (_visibleMaxValue > _maxOverallValue) {
+        _visibleMaxValue = _maxOverallValue;
+        _visibleMinValue = _maxOverallValue - _zoomWindowSize;
+      }
+    });
+  }
+
+  // Begin ruler animation when top slider position changes
+  void _startRulerAnimation() {
+    // Stop any current animation
+    _rulerAnimationController.stop();
+
+    // Calculate the center value for the current visible range
+    double currentCenterValue = (_visibleMinValue + _visibleMaxValue) / 2;
+
+    // Calculate the target center value based on new top slider position
+    double targetCenterValue = _minOverallValue +
+        (_maxOverallValue - _minOverallValue) * _topSliderPosition;
+
+    // Set animation values
+    _startCenterValue = currentCenterValue;
+    _targetCenterValue = targetCenterValue;
+
+    // Configure the animation
+    _rulerAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _rulerAnimationController,
+      curve: Curves.easeOutCubic,
+    ));
+
+    // Start the animation
+    _rulerAnimationController.reset();
+    _rulerAnimationController.forward();
   }
 
   // Snap animation update listeners
@@ -224,6 +298,7 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
     _upSliderController.dispose();
     _downSliderSnapController.dispose();
     _upSliderSnapController.dispose();
+    _rulerAnimationController.dispose();
     super.dispose();
   }
 
@@ -239,8 +314,10 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
   }
 
   int _getValueFromPosition(double position) {
-    // Use .toDouble() to ensure proper calculation, then round to int
-    return (_minValue + ((_maxValue - _minValue) * position)).round();
+    // Use the visible values for the current animated view
+    return (_visibleMinValue +
+            ((_visibleMaxValue - _visibleMinValue) * position))
+        .round();
   }
 
   // Calculate visible range for zoomed-out view
@@ -249,7 +326,8 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
     double totalRange = _maxOverallValue - _minOverallValue;
 
     // Calculate the zoom window center value (in the number range)
-    double zoomedValue = _minValue + ((_maxValue - _minValue) * zoomPosition);
+    double zoomedValue = _visibleMinValue +
+        ((_visibleMaxValue - _visibleMinValue) * zoomPosition);
 
     // Calculate the position of this value in the overall range
     return (zoomedValue - _minOverallValue) / totalRange;
@@ -478,15 +556,14 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
                                 ),
                                 child: Column(
                                   children: [
-                                    // Slider 1
+                                    // Overview slider
                                     Container(
                                       margin: EdgeInsets.symmetric(
                                           vertical: 5.h, horizontal: 8.w),
                                       padding: EdgeInsets.symmetric(
                                           vertical: 1.h, horizontal: 6.w),
                                       decoration: BoxDecoration(
-                                        color: const Color(
-                                            0xFF093881), // Darker blue background
+                                        color: const Color(0xFF093881),
                                         borderRadius:
                                             BorderRadius.circular(8.r),
                                       ),
@@ -571,6 +648,10 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
                                                             (details.delta.dx *
                                                                 dampFactor);
 
+                                                    // Store previous position before updating
+                                                    _previousTopSliderPosition =
+                                                        _topSliderPosition;
+
                                                     // Convert back to 0-1 range and clamp
                                                     _topSliderPosition =
                                                         (newPosInPixels /
@@ -580,6 +661,14 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
 
                                                     // Update the detail view range based on new position
                                                     _updateDetailViewRange();
+
+                                                    // Animate the ruler
+                                                    if ((_topSliderPosition -
+                                                                _previousTopSliderPosition)
+                                                            .abs() >
+                                                        0.001) {
+                                                      _startRulerAnimation();
+                                                    }
                                                   });
                                                 },
                                               ),
@@ -589,7 +678,7 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
                                             Positioned(
                                               left: _topSliderPosition *
                                                       (contentWidth - 20.w) -
-                                                  45.w,
+                                                  20.w,
                                               top: 2.h,
                                               child: GestureDetector(
                                                 onTapDown: (_) {
@@ -630,6 +719,10 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
                                                             (details.delta.dx *
                                                                 dampFactor);
 
+                                                    // Store previous position before updating
+                                                    _previousTopSliderPosition =
+                                                        _topSliderPosition;
+
                                                     // Convert back to 0-1 range and clamp
                                                     _topSliderPosition =
                                                         (newPosInPixels /
@@ -639,6 +732,14 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
 
                                                     // Update the detail view range based on new position
                                                     _updateDetailViewRange();
+
+                                                    // Animate the ruler
+                                                    if ((_topSliderPosition -
+                                                                _previousTopSliderPosition)
+                                                            .abs() >
+                                                        0.001) {
+                                                      _startRulerAnimation();
+                                                    }
                                                   });
                                                 },
                                                 onPanEnd: (_) {
@@ -656,7 +757,7 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
                                                       scale: _topSliderAnimation
                                                           .value,
                                                       child: Container(
-                                                        width: 90.w,
+                                                        width: 40.w,
                                                         height: 31.h,
                                                         decoration:
                                                             BoxDecoration(
@@ -707,7 +808,7 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
                                                   top: 8
                                                       .h, // Aligned with the triangle
                                                   child: Text(
-                                                    _minValue
+                                                    _visibleMinValue
                                                         .toInt()
                                                         .toString(),
                                                     style: TextStyle(
@@ -725,7 +826,7 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
                                                   top: 8
                                                       .h, // Aligned with the triangle
                                                   child: Text(
-                                                    _maxValue
+                                                    _visibleMaxValue
                                                         .toInt()
                                                         .toString(),
                                                     style: TextStyle(
@@ -782,6 +883,7 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
                                                             false;
                                                         _downSliderController
                                                             .reverse();
+                                                        _snapDownSliderToNearestTick();
                                                       });
                                                     },
                                                     child: AnimatedBuilder(
@@ -832,18 +934,49 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
                                                   ),
                                                 ),
 
-                                                // Tick marks
+                                                // Tick marks - Generate based on visible range for smooth animation
                                                 ...List.generate(11, (index) {
+                                                  // Calculate value at this position
+                                                  double value = _visibleMinValue +
+                                                      ((_visibleMaxValue -
+                                                                  _visibleMinValue) /
+                                                              10) *
+                                                          index;
+
                                                   return Positioned(
                                                     left: index *
                                                         (contentWidth - 100.w) /
                                                         10,
                                                     top: 9.h,
-                                                    child: Container(
-                                                      height: 12.h,
-                                                      width: 2.w,
-                                                      color: AppColors
-                                                          .numberYellow,
+                                                    child: Column(
+                                                      children: [
+                                                        Container(
+                                                          height: 12.h,
+                                                          width: 2.w,
+                                                          color: AppColors
+                                                              .numberYellow,
+                                                        ),
+                                                        // Add small labels for each tick
+                                                        if (index % 2 ==
+                                                            0) // Only show every other tick label to avoid crowding
+                                                          Padding(
+                                                            padding:
+                                                                EdgeInsets.only(
+                                                                    top: 2.h),
+                                                            child: Text(
+                                                              value
+                                                                  .round()
+                                                                  .toString(),
+                                                              style: TextStyle(
+                                                                color: Colors
+                                                                    .white
+                                                                    .withOpacity(
+                                                                        0.7),
+                                                                fontSize: 8.sp,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                      ],
                                                     ),
                                                   );
                                                 }),
@@ -923,6 +1056,7 @@ class _GamePageState extends State<GamePage> with TickerProviderStateMixin {
                                                             false;
                                                         _upSliderController
                                                             .reverse();
+                                                        _snapUpSliderToNearestTick();
                                                       });
                                                     },
                                                     child: AnimatedBuilder(
